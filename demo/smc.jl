@@ -149,6 +149,7 @@ function smc_ula(
     qΓ⁻¹q  = zeros(n_particles)
     Δlogws = zeros(n_particles)
     logws  = zeros(n_particles)
+    Gs     = zeros(n_particles)
     logZ   = 0.0
 
     ψ0 = first(policy)
@@ -173,14 +174,16 @@ function smc_ula(
 
         Δlogws[i] = ℓμψ + G0 + ℓM1ψ
         qs[:,i]   = q′
+        Gs[i]     = G0
         qΓ⁻¹q[i]  = sum(abs2, Γchol\q′)
     end
 
-    ws, logws, logZ, ess               = reweight(logws, Δlogws, logZ)
-    xs, qs, logws, ancestor, resampled = resample(rng, xs, ws, logws, qs, ess)
+    ws, logws, logZ, ess  = reweight(logws, Δlogws, logZ)
 
-    states[1] = (particles=xs, ancestor=ancestor, fwdeuler=qs, eulerquad=qΓ⁻¹q)
-    info[1]   = (iteration=1, ess=ess, logZ=logZ, resampled=resampled)
+    states[1] = (particles=xs, fwdeuler=qs, eulerquad=qΓ⁻¹q)
+    info[1]   = (iteration=1, ess=ess, logZ=logZ)
+
+    xs, qs, logws, ancestor, resampled = resample(rng, xs, ws, logws, qs, ess)
 
     for t in 2:T
         γprev = schedule[t-1]
@@ -208,10 +211,20 @@ function smc_ula(
     xs, info
 end
 
+function quadratic_regression(X, y)
+
+end
+
 function optimize_policy(states)
-     for state in reverse(states)
+    n_states = length(states)
+    for state in reverse(last(states, n_states))
          
-     end
+    end
+    state = last(states)
+    G0    = 
+    M1ψ   = 
+
+    A, b, c = quadratic_regression(state.particles, G0.*M1ψ)
 end
 
 function main()
