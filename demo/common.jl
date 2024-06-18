@@ -1,4 +1,35 @@
 
+abstract type AbstractSMC end
+
+abstract type AbstractBackwardKernel end
+
+struct AnnealingPath{S <: AbstractVector{<:Real}}
+    schedule
+end
+
+function AnnealingPath(schedule::AbstractVector)
+    @assert first(schedule) == 0 && last(schedule) == 1
+    @assert length(schedule) > 2
+    AnnealingPath{typeof(schedule)}(schedule)
+end
+
+Base.length(path::AnnealingPath) = length(path.schedule)
+
+function anneal(path::AnnealingPath, t::Int, x, y)
+    γt = path.schedule[t]
+    (1 - γt)*x + γt*y
+end
+
+function annealed_logtarget(
+    path     ::AnnealingPath,
+    t        ::Int,
+    x        ::AbstractVector,
+    proposal,
+    logtarget
+)
+    anneal(path, t, logpdf(proposal, x), logtarget(x))
+end
+
 function systematic_sampling(rng, weights::AbstractVector, n_resample=length(weights))
     N  = length(weights)
     Δs = 1/n_resample
@@ -19,7 +50,7 @@ end
 
 function resample(rng, x, w, logw, ess)
     n_particles = size(x, 2)
-    if true #ess < n_particles/2
+    if ess < n_particles/2
         idx       = systematic_sampling(rng, w)       
         resampled = true
         x[:,:]    = x[:,idx]
