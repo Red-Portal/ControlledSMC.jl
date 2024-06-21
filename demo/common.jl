@@ -30,6 +30,10 @@ function annealed_logtarget(
     anneal(path, t, logpdf(proposal, x), logtarget(x))
 end
 
+struct DetailedBalance <: AbstractBackwardKernel end
+
+struct ForwardKernel <: AbstractBackwardKernel end
+
 function systematic_sampling(rng, weights::AbstractVector, n_resample=length(weights))
     N  = length(weights)
     Δs = 1/n_resample
@@ -48,30 +52,30 @@ function systematic_sampling(rng, weights::AbstractVector, n_resample=length(wei
     resample_idx
 end
 
-function resample(rng, x, w, logw, ess, threshold)
+function resample(rng, x, ℓw, ess, threshold)
     n_particles = size(x, 2)
-    if ess < n_particles*threshold
-        idx       = systematic_sampling(rng, w)       
+    # Marginal likelihood update rule currently seems biased for
+    # adaptive resampling.
+    if true #ess < n_particles*threshold
+        idx       = systematic_sampling(rng, exp.(ℓw))
         resampled = true
         x[:,:]    = x[:,idx]
-        w[:]     .= 1/n_particles
-        logw[:]  .= -log(n_particles)
-        x, w, logw, idx, resampled
+        ℓw[:]    .= -log(n_particles)
+        x, ℓw, idx, resampled
     else
         resampled = false
         ancestor  = collect(1:n_particles)
-        x, w, logw, ancestor, resampled
+        x, ℓw, ancestor, resampled
     end
 end
 
-function reweight(logw, G, logZ)
-    N    = length(logw)
-    logw = logw + G
-    logZ = logZ + logsumexp(G) - log(N)
-    logw = logw .- logsumexp(logw)
-    w    = exp.(logw)
-    ess  = 1 / sum(w.^2)
-    w, logw, logZ, ess
+function reweight(ℓw, ℓG, ℓZ)
+    N   = length(ℓw)
+    ℓw  = ℓw + ℓG
+    ℓZ  = ℓZ + logsumexp(ℓG) - log(N)
+    ℓw  = ℓw .- logsumexp(ℓw)
+    ess = exp(-logsumexp(2*ℓw))
+    ℓw, ℓZ, ess
 end
 
 function euler_fwd(logtarget, x, h, Γ)

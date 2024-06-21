@@ -14,10 +14,6 @@ using Random123
 include("common.jl")
 include("sample.jl")
 
-struct DetailedBalance <: AbstractBackwardKernel end
-
-struct ForwardKernel <: AbstractBackwardKernel end
-
 struct SMCULA{
     G  <: AbstractMatrix,
     GL <: AbstractMatrix,
@@ -107,14 +103,14 @@ function main()
     n_iters  = 16
     schedule = range(0, 1; length=n_iters).^2
 
-    #hline([0.0]) |> display
+    hline([0.0]) |> display
 
     sampler = SMCULA(Γ, Γchol, h0, hT, ForwardKernel(), AnnealingPath(schedule))
 
     particles = [32, 64, 128, 256, 512, 1024]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
-            xs, stats    = smc(rng, sampler, n_particles, 1.0, proposal, logtarget)
+            xs, stats    = smc(rng, sampler, n_particles, 0.5, proposal, logtarget)
             (mean(xs, dims=2)[:,1], last(stats).logZ)
         end
 
