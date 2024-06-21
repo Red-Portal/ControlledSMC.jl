@@ -48,9 +48,9 @@ function systematic_sampling(rng, weights::AbstractVector, n_resample=length(wei
     resample_idx
 end
 
-function resample(rng, x, w, logw, ess)
+function resample(rng, x, w, logw, ess, threshold)
     n_particles = size(x, 2)
-    if ess < n_particles/2
+    if ess < n_particles*threshold
         idx       = systematic_sampling(rng, w)       
         resampled = true
         x[:,:]    = x[:,idx]

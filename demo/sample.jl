@@ -3,6 +3,7 @@ function smc(
     rng        ::Random.AbstractRNG,
     sampler    ::AbstractSMC,
     n_particles::Int,
+    threshold  ::Real,
     proposal   ::MvNormal,
     logtarget,
 )
@@ -30,7 +31,7 @@ function smc(
         end
 
         w, logw, logZ, ess              = reweight(logw, G, logZ)
-        x, w, logw, ancestor, resampled = resample(rng, x, w, logw, ess)
+        x, w, logw, ancestor, resampled = resample(rng, x, w, logw, ess, threshold)
 
         states[t] = (particles=x, ancestor=ancestor)
         info[t]   = (iteration=t, ess=ess, logZ=logZ, resampled=resampled)

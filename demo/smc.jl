@@ -99,22 +99,22 @@ function main()
 
     h0    = 5e-2
     hT    = 5e-3
-    #h0    = hT = 5e-3
+    h0    = hT = 5e-3
 
     Γ     = Eye(d)
     Γchol = Eye(d)
 
-    n_iters  = 4
-    schedule = range(0, 1; length=n_iters).^3
+    n_iters  = 16
+    schedule = range(0, 1; length=n_iters).^2
 
-    hline([0.0]) |> display
+    #hline([0.0]) |> display
 
     sampler = SMCULA(Γ, Γchol, h0, hT, ForwardKernel(), AnnealingPath(schedule))
 
-    particles = [32, 128, 512, 2048]
+    particles = [32, 64, 128, 256, 512, 1024]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
-            xs, stats    = smc(rng, sampler, n_particles, proposal, logtarget)
+            xs, stats    = smc(rng, sampler, n_particles, 1.0, proposal, logtarget)
             (mean(xs, dims=2)[:,1], last(stats).logZ)
         end
 
@@ -124,14 +124,14 @@ function main()
         dotplot!(fill(2*idx-1, length(logZ)), logZ, markercolor=:blue)            |> display
     end
 
-    sampler = SMCULA(Γ, Γchol, h0, hT, DetailedBalance(), AnnealingPath(schedule))
-    for (idx, n_particles) in enumerate(particles)
-        res = @showprogress map(1:64) do _
-            xs, stats    = smc(rng, sampler, n_particles, proposal, logtarget)
-            (mean(xs, dims=2)[:,1], last(stats).logZ)
-        end
-        logZ = [last(r) for r in res]
-        violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red,  alpha=0.2) |> display
-        dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red)             |> display
-    end
+    # sampler = SMCULA(Γ, Γchol, h0, hT, DetailedBalance(), AnnealingPath(schedule))
+    # for (idx, n_particles) in enumerate(particles)
+    #     res = @showprogress map(1:64) do _
+    #         xs, stats    = smc(rng, sampler, n_particles, proposal, logtarget)
+    #         (mean(xs, dims=2)[:,1], last(stats).logZ)
+    #     end
+    #     logZ = [last(r) for r in res]
+    #     violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red,  alpha=0.2) |> display
+    #     dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red)             |> display
+    # end
 end
