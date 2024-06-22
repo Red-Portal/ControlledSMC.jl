@@ -42,7 +42,7 @@ function mutate(
     logπt(x) = annealed_logtarget(path, t, x, proposal, logtarget)
     ht = anneal(path, t, h0, hT)
     q  = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
-    q + sqrt(2*ht)*unwhiten(Γ, randn(rng, size(q)))
+    q + sqrt(ht)*unwhiten(Γ, randn(rng, size(q)))
 end
 
 function potential(
@@ -91,8 +91,8 @@ function potential_with_backward(
     logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
 
     map(eachcol(x_curr), eachcol(x_prev)) do xi_curr, xi_prev
-        K = MvNormal(euler_fwd(logπt,   xi_prev, ht,   Γ), 2*ht*Γ)
-        L = MvNormal(euler_fwd(logπtm1, xi_curr, htm1, Γ), 2*htm1*Γ)
+        K = MvNormal(euler_fwd(logπt,   xi_prev, ht,   Γ), ht*Γ)
+        L = MvNormal(euler_fwd(logπtm1, xi_curr, htm1, Γ), htm1*Γ)
         (logπt(xi_curr) + logpdf(L, xi_prev)) -
             (logπtm1(xi_prev) + logpdf(K, xi_curr))
     end
