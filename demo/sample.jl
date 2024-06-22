@@ -1,59 +1,49 @@
 
-function Base.rand(
+function rand_initial_particles(
     rng        ::Random.AbstractRNG,
-               ::AbstractSMC,
-    proposal,
+    sampler    ::AbstractSMC,
     n_particles::Int,
 )
-    rand(rng, proposal, n_particles)
+    rand(rng, sampler.proposal, n_particles)
 end
 
-function potential_init(::AbstractSMC, x::AbstractMatrix, proposal, logtarget)
+function potential_init(::AbstractSMC, x::AbstractMatrix, logtarget)
     n_particles = size(x, 2)
     zeros(n_particles)
 end
 
-function smc(
+function sample(
     rng        ::Random.AbstractRNG,
     sampler    ::AbstractSMC,
     n_particles::Int,
     threshold  ::Real,
-    proposal   ::MvNormal,
     logtarget,
 )
-    T  = length(sampler.path)
-    x  = rand(rng, sampler, proposal, n_particles)
-    ℓG = potential_init(sampler, x, proposal, logtarget)
-    ℓZ = 0.0
-    ℓw = fill(-log(n_particles), n_particles)
-
-    ℓw, ℓZ, ess              = reweight(ℓw, ℓG, ℓZ)
-    x, ℓw, ancestor, resampled = resample(rng, x, ℓw, ess, threshold)
-
+    T      = length(sampler)
     states = Array{NamedTuple}(undef, T)
     info   = Array{NamedTuple}(undef, T)
 
-    states[1] = (particles=x,)
+    x  = rand_initial_particles(rng, sampler, n_particles)
+    ℓG = potential_init(sampler, x, logtarget)
+    ℓZ = 0.0
+    ℓw = fill(-log(n_particles), n_particles)
+
+    ℓw, ℓZ, ess = reweight(ℓw, ℓG, ℓZ)
+    x, ℓw, ancestors, resampled = resample(rng, x, ℓw, ess, threshold)
+
+    states[1] = (particles=x, ancestors=ancestors, logG=ℓG[ancestors])
     info[1]   = (iteration=1, ess=n_particles, logZ=ℓZ)
 
     for t in 2:T
-        for i in 1:size(x,2)
-            xi_prev = x[:,i]
-            xi_curr = mutate(rng, sampler, t, xi_prev, proposal, logtarget)
+        x_next = mutate(rng, sampler, t, x, logtarget)
+        ℓG     = potential(sampler, t, x_next, x, logtarget)
+        x      = x_next
 
-            ℓGi = potential(
-                sampler, sampler.backward, t, xi_curr, xi_prev, proposal, logtarget
-            )
+        ℓw, ℓZ, ess                 = reweight(ℓw, ℓG, ℓZ)
+        x, ℓw, ancestors, resampled = resample(rng, x, ℓw, ess, threshold)
 
-            x[:,i] = xi_curr
-            ℓG[i]  = ℓGi
-        end
-
-        ℓw, ℓZ, ess              = reweight(ℓw, ℓG, ℓZ)
-        x, ℓw, ancestor, resampled = resample(rng, x, ℓw, ess, threshold)
-
-        states[t] = (particles=x, ancestor=ancestor)
+        states[t] = (particles=x, ancestors=ancestors, logG=ℓG)
         info[t]   = (iteration=t, ess=ess, logZ=ℓZ, resampled=resampled)
     end
-    x, info
+    x, states, info
 end
