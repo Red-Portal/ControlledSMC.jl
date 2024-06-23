@@ -64,10 +64,9 @@ function rand_initial_particles(
     rand(rng, qψ, n_particles)
 end
 
-function twisted_kernel_marginal(sampler::CSMCULA, t, logtarget, x)
-    (; smc, policy)               = sampler
+function twisted_kernel_marginal(smc::SMCULA, twist_next, t, logtarget, x)
     (; path, h0, hT, Γ, proposal) = smc
-    @unpack A, K, b, c = policy[t+1]
+    (; K, b, c)                   = twist_next
     logπt(x)   = annealed_logtarget(path,  t,  x, proposal, logtarget)
     logπtp1(x) = annealed_logtarget(path, t+1, x, proposal, logtarget)
     h = anneal(path, t+1, h0, hT)
@@ -98,9 +97,9 @@ function potential_init(
     Σ    = Distributions._cov(smc.proposal)
     ℓG0  = 0.0
     z    = Σ\μ - b
-    ℓqψ0 = (-logdet(Σ) + logdet(K) + quad(K, z) - quad(Σ, μ))/2 - c
+    ℓqψ0 = (-logdet(Σ) + logdet(K) + quad(K, z) - invquad(Σ, μ))/2 - c
     ℓψ0  = -sum(x.*(A*x), dims=1)[1,:] - (b'*x)[1,:] .- c
-    ℓMψ  = twisted_kernel_marginal(sampler, 1, logtarget, x)
+    ℓMψ  = twisted_kernel_marginal(smc, policy[2], 1, logtarget, x)
 
     ℓG0 + ℓqψ0 .+ (ℓMψ - ℓψ0)
 end
@@ -144,51 +143,92 @@ function potential(
     T  = length(smc)
 
     if t < T
-        ℓMψ = twisted_kernel_marginal(sampler, t, logtarget, x_curr)
+        ℓMψ = twisted_kernel_marginal(smc, policy[t+1], t, logtarget, x_curr)
         ℓG + ℓMψ - ℓψ
     elseif t == T
         ℓG - ℓψ
     end
 end
 
-function optimize_policy(sampler, states)
-    policy   = sampler.policy
-    proposal = sampler.smc.proposal
+function fit_quadratic(x, y)
+    d, n = size(x,1), size(x,2)
+    @assert size(x,2) == length(y)
 
-    Σ0 = Distributions._cov(proposal)
+    features = vcat(x.^2, x, ones(1, n))' |> Array
+    β        = qr(features, Val(true)) \ y
 
-    particles, ancestors, logG = first(states)
+    A = β[1:d]
+    b = β[d+1:2*d]
+    c = β[end]
+    
+    Diagonal(A), b, c
+end
 
-    ψ0 = first(policy)
-    d  = size(particles, 1)
-    n  = size(particles, 2)
+function optimize_policy(sampler, logtarget, states)
+    smc = sampler.smc
+    (; path, h0, hT, Γ, proposal) = smc
 
-    @unpack A, b, c = ψ0
+    policy_prev = sampler.policy
+    proposal    = sampler.smc.proposal
+    T           = length(sampler)
+    policy_next = deepcopy(policy_prev)
 
-    #particles = particles[:,ancestors]
-    #logG      = logG
+    twist_recur = last(policy_prev)
+    for t in T:-1:1
+        (; particles, ancestors, logG) = states[t]
 
-    y  = logG #+ logM
-    Xt = vcat(particles.^2, particles, ones(1, n))
-    X  = Array(Xt')
-    β  = cholesky(X'*X + 1e-7*I)\(X'*y)
+        logM = if t == T
+            zeros(size(particles, 2))
+        else
+            twisted_kernel_marginal(smc, twist_recur, t, logtarget, particles)
+        end
 
-    ΔA = Diagonal(abs.(β[1:d]))
-    Δb = β[d+1:2*d]
-    Δc = β[end]
+        V = if t == 1
+            -logG - logM
+        else
+            particles_prev = states[t-1].particles
 
-    A += ΔA
-    b += Δb
-    c += Δc
+            logπt(x)   = annealed_logtarget(path,   t, x, proposal, logtarget)
+            logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
+            
+            particles_ancestor = particles_prev[:,ancestors]
 
-    # println(diag(A))
-    # println(b)
-    # println(c)
-    # throw()
+            ℓπt_xtm1   = map(xi -> logπt(xi),   eachcol(particles_ancestor))
+            ℓπtm1_xtm1 = map(xi -> logπtm1(xi), eachcol(particles_ancestor))
+            Δℓπ        = ℓπt_xtm1 - ℓπtm1_xtm1
 
-    K = inv(inv(Σ0) + 2*A)
+            -logG - logM - Δℓπ
+        end
 
-    @set sampler.policy[1] = (A=A, b=b, c=c, K=K)
+        ht = anneal(path, t, h0, hT)
+
+        ΔA, Δb, Δc = fit_quadratic(particles, V)
+        ΔK = if t == 1
+            Σ0 = Distributions._cov(proposal)
+            inv(inv(Σ0) + 2*ΔA)
+        else
+            inv(inv(Γ) + 2*ht*ΔA)
+        end
+
+        A_next = policy_prev[t].A + ΔA
+        b_next = policy_prev[t].b + Δb
+        c_next = policy_prev[t].c + Δc
+
+        if any(diag(A_next) .< 1e-10 )
+            A_next[diagind(A_next)] .= softplus.(diag(A_next))
+        end
+
+        K = if t == 1
+            Σ0 = Distributions._cov(proposal)
+            inv(inv(Σ0) + 2*A_next)
+        else
+            inv(inv(Γ) + 2*ht*A_next)
+        end
+
+        policy_next[t] = (A=A_next, b=b_next, c=c_next, K=K)
+        twist_recur    = (A=ΔA, b=Δb, c=Δc, K=ΔK)
+    end
+    @set sampler.policy = policy_next
 end
 
 function main()
@@ -210,26 +250,28 @@ function main()
     Γ     = Diagonal(ones(d))
 
     n_iters  = 16
-    schedule = range(0, 1; length=n_iters).^2
+    schedule = range(0, 1; length=n_iters)
 
     hline([0.0]) |> display
 
-    smc = SMCULA(
-        Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
-    )
-    csmc = CSMCULA(
-        Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
-    )
-
-    n_particles = 128
+    n_particles = 1024
     res = @showprogress map(1:64) do _
+        smc = SMCULA(
+            Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
+        )
+        csmc = CSMCULA(
+            Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
+        )
+
         xs, _, stats_smc = sample(rng, smc, n_particles, 0.5, logtarget)
 
-        xs, states, stats_csmc0 = sample(rng, csmc, n_particles, 0.5, logtarget)
-        #csmc                    = optimize_policy(csmc, states)
-        #xs, _, stats_csmc1      = sample(rng, csmc, n_particles, 0.5, logtarget)
+        xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
+        #for i in 1:3
+            csmc                   = optimize_policy(csmc, logtarget, states)
+            xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
+        #end
 
-        (last(stats_smc).logZ, last(stats_csmc0).logZ,)
+        (last(stats_smc).logZ, last(stats_csmc).logZ,)
     end
     logZ = [first(r) for r in res]
     violin!( fill(1, length(logZ)), logZ,   fillcolor=:blue, alpha=0.2) |> display
