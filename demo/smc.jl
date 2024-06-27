@@ -7,6 +7,7 @@ using LogExpFunctions
 using LinearAlgebra
 using Plots, StatsPlots
 using ProgressMeter
+using PDMats
 using SimpleUnPack
 using FillArrays
 using Random123
@@ -103,24 +104,24 @@ function main()
     rng  = Philox4x(UInt64, seed, 8)
     set_counter!(rng, 1)
 
-    d            = 4
-    μ            = randn(d)/2
-    logtarget(x) = logpdf(MvNormal(μ, 0.01*I + 0.001*ones(d,d)), x)
+    d            = 20
+    μ            = Fill(10, d)
+    logtarget(x) = logpdf(MvNormal(μ, I), x)
     
     μ0           = Zeros(d)
     Σ0           = Eye(d)
     proposal     = MvNormal(μ0, Σ0)
 
-    h0    = 5e-2
-    hT    = 5e-3
-    h0    = hT = 5e-3
+    #h0    = 5e-2
+    #hT    = 5e-3
+    h0    = hT = 2.0
 
     Γ     = Eye(d)
 
     n_iters  = 16
-    schedule = range(0, 1; length=n_iters).^2
+    schedule = range(0, 1; length=n_iters)
 
-    hline([0.0]) |> display
+    hline([0.0], label="True logZ") |> display
 
     sampler = SMCULA(
         Γ,
@@ -140,25 +141,25 @@ function main()
 
         logZ = [last(r) for r in res]
 
-        violin!( fill(2*idx-1, length(logZ)), logZ, fillcolor  =:blue, alpha=0.2) |> display
-        dotplot!(fill(2*idx-1, length(logZ)), logZ, markercolor=:blue)            |> display
+        violin!( fill(2*idx-1, length(logZ)), logZ, fillcolor  =:blue, alpha=0.2, label="N=$(n_particles)") |> display
+        dotplot!(fill(2*idx-1, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
     end
 
-    sampler = SMCULA(
-        Γ,
-        h0,
-        hT,
-        DetailedBalance(),
-        proposal,
-        AnnealingPath(schedule)
-    )
-    for (idx, n_particles) in enumerate(particles)
-        res = @showprogress map(1:64) do _
-            xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
-            (mean(xs, dims=2)[:,1], last(stats).logZ)
-        end
-        logZ = [last(r) for r in res]
-        violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red,  alpha=0.2) |> display
-        dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red)             |> display
-    end
+    # sampler = SMCULA(
+    #     Γ,
+    #     h0,
+    #     hT,
+    #     DetailedBalance(),
+    #     proposal,
+    #     AnnealingPath(schedule)
+    # )
+    # for (idx, n_particles) in enumerate(particles)
+    #     res = @showprogress map(1:64) do _
+    #         xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
+    #         (mean(xs, dims=2)[:,1], last(stats).logZ)
+    #     end
+    #     logZ = [last(r) for r in res]
+    #     violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red, alpha=0.2, label="N=$(n_particles)") |> display
+    #     dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
+    # end
 end

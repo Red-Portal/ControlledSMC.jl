@@ -5,6 +5,7 @@ using FillArrays
 using ForwardDiff
 using LinearAlgebra
 using LogExpFunctions
+using Optim
 using PDMats
 using Plots, StatsPlots
 using ProgressMeter
@@ -32,22 +33,50 @@ function CSMCULA(
     proposal::MvNormal,
     path    ::AnnealingPath,
 ) where {F<:Real}
-    Σ0 = Distributions._cov(proposal)
-    d  = size(Γ, 1)
-    T  = length(path)
-    policy = map(1:T) do t
-        A  = Diagonal(zeros(d))
-        b  = zeros(d)
-        c  = 0.0 
-        K  = if t == 1
-            Σ0
-        else
-            Γ
-        end
-        (A=A, b=b, c=c, K=K)
-    end
-    smc = SMCULA(Γ, h0, hT, backward, proposal, path)
+    d      = size(Γ, 1)
+    policy = [(a=zeros(F, d), b=zeros(F, d), c=zero(F)) for _ in 1:length(path)]
+    smc    = SMCULA(Γ, h0, hT, backward, proposal, path)
     CSMCULA{typeof(smc), typeof(policy)}(smc, policy)
+end
+
+function rand_twist_mvnormal(
+    rng    ::Random.AbstractRNG,
+    twist,
+    μs     ::AbstractMatrix,
+    σ      ::AbstractVector,
+)
+    (; a, b,)  = twist
+    K          = Diagonal(@. 1/(2*a + 1/σ))
+    Σ          = Diagonal(σ)
+    μs_twisted = K*(Σ\μs .- b)
+    μs_twisted + unwhiten(K, randn(rng, size(μs)))
+end
+
+function twist_mvnormal_logmarginal(
+    twist,
+    μ     ::AbstractArray,
+    σ     ::AbstractVector
+)
+    (; a, b, c)  = twist
+    Σ     = Diagonal(σ)
+    K     = Diagonal(@. 1/(2*a + 1/σ))
+    ℓdetΣ = logdet(Σ)
+    ℓdetK = logdet(K)
+    z     = Σ\μ .- b
+    ((-ℓdetΣ + ℓdetK) .+ (quad(K, z) - invquad(Σ, μ)))/2 .- c
+end
+
+function twist_kernel_logmarginal(smc::SMCULA, twist, t, logtarget, x)
+    (; path, h0, hT, Γ, proposal) = smc
+    logπt(x) = annealed_logtarget(path, t, x, proposal, logtarget)
+    ht = anneal(path, t, h0, hT)
+    q  = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
+    twist_mvnormal_logmarginal(twist, q, ht*diag(Γ))
+end
+
+function twist_logdensity(twist, x)
+    (; a, b, c) = twist
+    -quad(Diagonal(a), x) - (b'*x)[1,:] .- c   
 end
 
 function rand_initial_particles(
@@ -57,30 +86,10 @@ function rand_initial_particles(
 )
     (; policy, smc) = sampler 
     proposal = smc.proposal
-    (; K, b) = first(policy)
-    μ  = mean(proposal)
-    Σ  = Distributions._cov(proposal)
-    qψ = MvNormal(K*(Σ\μ - b), K)
-    rand(rng, qψ, n_particles)
-end
-
-function twisted_kernel_marginal(smc::SMCULA, twist_next, t, logtarget, x)
-    (; path, h0, hT, Γ, proposal) = smc
-    (; K, b, c)                   = twist_next
-    logπt(x)   = annealed_logtarget(path,  t,  x, proposal, logtarget)
-    logπtp1(x) = annealed_logtarget(path, t+1, x, proposal, logtarget)
-    h = anneal(path, t+1, h0, hT)
-
-    ℓπt_xt   = map(xi -> logπt(xi),   eachcol(x))
-    ℓπtp1_xt = map(xi -> logπtp1(xi), eachcol(x))
-
-    ℓdetΓ = logdet(Γ)
-    ℓdetK = logdet(K)
-    q     = mapslices(xi -> euler_fwd(logπt, xi, h, Γ), x, dims=1)
-    z     = Γ\q .- h*b
-    Δlogπ = ℓπtp1_xt - ℓπt_xt
-
-    ((-ℓdetΓ + ℓdetK) .+ quad(K, z)/h - invquad(Γ, q)/h)/2 .- c + Δlogπ
+    μ, Σ     = mean(proposal), Distributions._cov(proposal)
+    rand_twist_mvnormal(
+        rng, first(policy), repeat(μ, 1, n_particles), diag(Σ)
+    )
 end
 
 function potential_init(
@@ -91,17 +100,14 @@ function potential_init(
     (; smc, policy) = sampler
     ψ0 = first(policy)
 
-    @unpack A, K, b, c = ψ0
-
     μ    = mean(smc.proposal)
     Σ    = Distributions._cov(smc.proposal)
     ℓG0  = 0.0
-    z    = Σ\μ - b
-    ℓqψ0 = (-logdet(Σ) + logdet(K) + quad(K, z) - invquad(Σ, μ))/2 - c
-    ℓψ0  = -sum(x.*(A*x), dims=1)[1,:] - (b'*x)[1,:] .- c
-    ℓMψ  = twisted_kernel_marginal(smc, policy[2], 1, logtarget, x)
+    ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ, diag(Σ))
+    ℓψ0  = twist_logdensity(ψ0, x)
+    ℓMψ  = twist_kernel_logmarginal(smc, policy[2], 2, logtarget, x)
 
-    ℓG0 + ℓqψ0 .+ (ℓMψ - ℓψ0)
+    @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
 end
 
 function mutate(
@@ -112,12 +118,10 @@ function mutate(
     logtarget
 )
     (; path, h0, hT, Γ, proposal) = sampler.smc
-    (; b, K) = sampler.policy[t]
     logπt(x) = annealed_logtarget(path, t, x, proposal, logtarget)
     ht = anneal(path, t, h0, hT)
     q  = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
-
-    K*(Γ\q .- ht*b) + sqrt(ht)*unwhiten(K, randn(rng, size(q)))
+    rand_twist_mvnormal(rng, sampler.policy[t], q, ht*diag(Γ))
 end
 
 function potential(
@@ -127,26 +131,17 @@ function potential(
     x_prev    ::AbstractMatrix,
     logtarget,
 )
-    (; smc, policy)    = sampler
-    (; A, b, c)        = policy[t]
-    (; path, proposal) = smc
+    (; smc, policy) = sampler
 
     ℓG = potential(smc, t, x_curr, x_prev, logtarget)
-
-    logπt(x)   = annealed_logtarget(path,   t, x, proposal, logtarget)
-    logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
-    ℓπt_xtm1   = map(xi -> logπt(xi),   eachcol(x_prev))
-    ℓπtm1_xtm1 = map(xi -> logπtm1(xi), eachcol(x_prev))
-    Δℓπ        = ℓπt_xtm1 - ℓπtm1_xtm1
-
-    ℓψ = -sum(x_curr.*(A*x_curr), dims=1)[1,:] - (b'*x_curr)[1,:] .- c + Δℓπ
+    ℓψ = twist_logdensity(policy[t], x_curr)
     T  = length(smc)
 
     if t < T
-        ℓMψ = twisted_kernel_marginal(smc, policy[t+1], t, logtarget, x_curr)
-        ℓG + ℓMψ - ℓψ
+        ℓMψ = twist_kernel_logmarginal(smc, policy[t+1], t+1, logtarget, x_curr)
+        @. ℓG + ℓMψ - ℓψ
     elseif t == T
-        ℓG - ℓψ
+        @. ℓG - ℓψ
     end
 end
 
@@ -154,14 +149,32 @@ function fit_quadratic(x, y)
     d, n = size(x,1), size(x,2)
     @assert size(x,2) == length(y)
 
-    features = vcat(x.^2, x, ones(1, n))' |> Array
-    β        = qr(features, Val(true)) \ y
+    X   = vcat(x.^2, x, ones(1, n))' |> Array
+    β   = ones(2*d + 1)
+    ϵ   = eps(eltype(x))
+    Xty = X'*y
+    XtX = Hermitian(X'*X)
 
-    A = β[1:d]
+    func(β_) = sum(abs2, X*β_ - y)
+    function grad!(g, β_)
+        g[:] = 2*(XtX*β_ - Xty)
+    end
+    function hess!(H, β_)
+        H[:,:] = 2*XtX
+    end
+    df    = TwiceDifferentiable(func, grad!, hess!, β)
+
+    lower = vcat(fill(ϵ, d), fill(-Inf, d+1))
+    upper = fill(Inf, 2*d+1)
+    dfc   = TwiceDifferentiableConstraints(lower, upper)
+    res   = optimize(df, dfc, β, IPNewton())
+
+    β = Optim.minimizer(res)
+    a = β[1:d]
     b = β[d+1:2*d]
     c = β[end]
     
-    Diagonal(A), b, c
+    a, b, c, sum(abs2, X*β - y)
 end
 
 function optimize_policy(sampler, logtarget, states)
@@ -175,58 +188,39 @@ function optimize_policy(sampler, logtarget, states)
 
     twist_recur = last(policy_prev)
     for t in T:-1:1
-        (; particles, ancestors, logG) = states[t]
+        (; particles, logG) = states[t]
 
-        logM = if t == T
-            zeros(size(particles, 2))
+        V = if t == T
+            logG
         else
-            twisted_kernel_marginal(smc, twist_recur, t, logtarget, particles)
+            twist_prev     = policy_prev[t]
+            a_prev, b_prev = twist_prev.a, twist_prev.b
+
+            logπt(x)  = annealed_logtarget(path, t, x, proposal, logtarget)
+            ht        = anneal(path, t, h0, hT)
+            q         = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), particles, dims=1)
+            γ         = diag(Γ)
+            K         = Diagonal(@. 1/(2*ht*a_prev + 1/γ))
+            μ_twisted = K*(Γ\q .- ht*b_prev)
+            Σ_twisted = ht*K
+            σ_twisted = diag(Σ_twisted)
+            logM      = twist_mvnormal_logmarginal(twist_recur, μ_twisted, σ_twisted)
+            logG + logM
         end
 
-        V = if t == 1
-            -logG - logM
-        else
-            particles_prev = states[t-1].particles
+        Δa, Δb, Δc, rmse = fit_quadratic(particles, -V)
 
-            logπt(x)   = annealed_logtarget(path,   t, x, proposal, logtarget)
-            logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
-            
-            particles_ancestor = particles_prev[:,ancestors]
+        @info("", t, rmse = sum(
+            abs2,
+            twist_logdensity((a=Δa, b=Δb, c=Δc), particles) - V
+        ))
 
-            ℓπt_xtm1   = map(xi -> logπt(xi),   eachcol(particles_ancestor))
-            ℓπtm1_xtm1 = map(xi -> logπtm1(xi), eachcol(particles_ancestor))
-            Δℓπ        = ℓπt_xtm1 - ℓπtm1_xtm1
-
-            -logG - logM - Δℓπ
-        end
-
-        ht = anneal(path, t, h0, hT)
-
-        ΔA, Δb, Δc = fit_quadratic(particles, V)
-        ΔK = if t == 1
-            Σ0 = Distributions._cov(proposal)
-            inv(inv(Σ0) + 2*ΔA)
-        else
-            inv(inv(Γ) + 2*ht*ΔA)
-        end
-
-        A_next = policy_prev[t].A + ΔA
+        a_next = policy_prev[t].a + Δa
         b_next = policy_prev[t].b + Δb
         c_next = policy_prev[t].c + Δc
 
-        if any(diag(A_next) .< 1e-10 )
-            A_next[diagind(A_next)] .= softplus.(diag(A_next))
-        end
-
-        K = if t == 1
-            Σ0 = Distributions._cov(proposal)
-            inv(inv(Σ0) + 2*A_next)
-        else
-            inv(inv(Γ) + 2*ht*A_next)
-        end
-
-        policy_next[t] = (A=A_next, b=b_next, c=c_next, K=K)
-        twist_recur    = (A=ΔA, b=Δb, c=Δc, K=ΔK)
+        policy_next[t] = (a=a_next, b=b_next, c=c_next)
+        twist_recur    = (a=Δa, b=Δb, c=Δc)
     end
     @set sampler.policy = policy_next
 end
@@ -236,26 +230,27 @@ function main()
     rng  = Philox4x(UInt64, seed, 8)
     set_counter!(rng, 1)
 
-    d            = 4
-    μ            = randn(d)/2
-    logtarget(x) = logpdf(MvNormal(μ, 0.01*I + 0.001*ones(d,d)), x)
+    d            = 20
+    μ            = Fill(3, d)
+    logtarget(x) = logpdf(MvNormal(μ, I), x)
+    n_episodes   = 3
     
     μ0           = Zeros(d)
-    Σ0           = Eye(d)
+    Σ0           = 3*Eye(d)
     proposal     = MvNormal(μ0, Σ0)
 
     #h0    = 5e-2
     #hT    = 5e-3
-    h0    = hT = 5e-3
+    h0    = hT = 0.3
     Γ     = Diagonal(ones(d))
 
-    n_iters  = 16
+    n_iters  = 32
     schedule = range(0, 1; length=n_iters)
 
-    hline([0.0]) |> display
+    hline([0.0], label="True logZ") |> display
 
-    n_particles = 1024
-    res = @showprogress map(1:64) do _
+    n_particles = 256
+    res = @showprogress map(1:16) do _
         smc = SMCULA(
             Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
         )
@@ -265,19 +260,29 @@ function main()
 
         xs, _, stats_smc = sample(rng, smc, n_particles, 0.5, logtarget)
 
-        xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
-        #for i in 1:3
+        xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
+        stats_csmc                  = stats_csmc_init
+        for _ in 1:n_episodes
             csmc                   = optimize_policy(csmc, logtarget, states)
             xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
-        #end
+        end
 
-        (last(stats_smc).logZ, last(stats_csmc).logZ,)
+        (
+            last(stats_smc).logZ,
+            last(stats_csmc_init).logZ,
+            last(stats_csmc).logZ,
+        )
+        #(nothing, last(stats_csmc).logZ,)
     end
     logZ = [first(r) for r in res]
-    violin!( fill(1, length(logZ)), logZ,   fillcolor=:blue, alpha=0.2) |> display
-    dotplot!(fill(1, length(logZ)), logZ, markercolor=:blue)            |> display
+    violin!( fill(1, length(logZ)), logZ, fillcolor=:blue, alpha=0.2, label="SMC N=$(n_particles)") |> display
+    dotplot!(fill(1, length(logZ)), logZ, markercolor=:blue) |> display
+
+    logZ = [r[2] for r in res]
+    violin!( fill(2, length(logZ)), logZ, fillcolor=:red, alpha=0.2, label="CSMC N=$(n_particles) J=0") |> display
+    dotplot!(fill(2, length(logZ)), logZ, markercolor=:red) |> display
 
     logZ = [last(r) for r in res]
-    violin!( fill(2, length(logZ)), logZ,   fillcolor=:red, alpha=0.2) |> display
-    dotplot!(fill(2, length(logZ)), logZ, markercolor=:red)            |> display
+    violin!( fill(3, length(logZ)), logZ, fillcolor=:red, alpha=0.2, label="CSMC N=$(n_particles) J=$(n_episodes)") |> display
+    dotplot!(fill(3, length(logZ)), logZ, markercolor=:red) |> display
 end

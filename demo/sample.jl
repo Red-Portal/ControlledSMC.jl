@@ -29,9 +29,12 @@ function sample(
     ℓw = fill(-log(n_particles), n_particles)
 
     ℓw, ℓZ, ess = reweight(ℓw, ℓG, ℓZ)
+
+    states[1] = (particles=x, logG=ℓG)
+
     x, ℓw, ancestors, resampled = resample(rng, x, ℓw, ess, threshold)
 
-    states[1] = (particles=x, ancestors=ancestors, logG=ℓG[ancestors])
+    #states[1] = (particles=x, ancestors=ancestors, logG=ℓG[ancestors])
     info[1]   = (iteration=1, ess=n_particles, logZ=ℓZ)
 
     for t in 2:T
@@ -39,10 +42,12 @@ function sample(
         ℓG     = potential(sampler, t, x_next, x, logtarget)
         x      = x_next
 
-        ℓw, ℓZ, ess                 = reweight(ℓw, ℓG, ℓZ)
+        ℓw, ℓZ, ess = reweight(ℓw, ℓG, ℓZ)
+
+        states[t] = (particles=x, logG=ℓG)
+
         x, ℓw, ancestors, resampled = resample(rng, x, ℓw, ess, threshold)
 
-        states[t] = (particles=x, ancestors=ancestors, logG=ℓG)
         info[t]   = (iteration=t, ess=ess, logZ=ℓZ, resampled=resampled)
     end
     x, states, info
