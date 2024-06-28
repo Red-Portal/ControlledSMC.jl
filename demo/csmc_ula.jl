@@ -69,8 +69,8 @@ end
 function twist_kernel_logmarginal(smc::SMCULA, twist, t, logtarget, x)
     (; path, h0, hT, Γ, proposal) = smc
     logπt(x) = annealed_logtarget(path, t, x, proposal, logtarget)
-    ht = anneal(path, t, h0, hT)
-    q  = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
+    ht    = anneal(path, t, h0, hT)
+    q     = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
     twist_mvnormal_logmarginal(twist, q, ht*diag(Γ))
 end
 
@@ -193,18 +193,18 @@ function optimize_policy(sampler, logtarget, states)
         V = if t == T
             logG
         else
-            twist_prev     = policy_prev[t]
+            twist_prev     = policy_prev[t+1]
             a_prev, b_prev = twist_prev.a, twist_prev.b
 
-            logπt(x)  = annealed_logtarget(path, t, x, proposal, logtarget)
-            ht        = anneal(path, t, h0, hT)
-            q         = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), particles, dims=1)
-            γ         = diag(Γ)
-            K         = Diagonal(@. 1/(2*ht*a_prev + 1/γ))
-            μ_twisted = K*(Γ\q .- ht*b_prev)
-            Σ_twisted = ht*K
-            σ_twisted = diag(Σ_twisted)
-            logM      = twist_mvnormal_logmarginal(twist_recur, μ_twisted, σ_twisted)
+            logπtp1(x) = annealed_logtarget(path, t+1, x, proposal, logtarget)
+            htp1       = anneal(path, t+1, h0, hT)
+            q          = mapslices(xi -> euler_fwd(logπtp1, xi, htp1, Γ), particles, dims=1)
+            γ          = diag(Γ)
+            K          = Diagonal(@. 1/(2*htp1*a_prev + 1/γ))
+            μ_twisted  = K*(Γ\q .- htp1*b_prev)
+            Σ_twisted  = htp1*K
+            σ_twisted  = diag(Σ_twisted)
+            logM       = twist_mvnormal_logmarginal(twist_recur, μ_twisted, σ_twisted)
             logG + logM
         end
 
@@ -231,20 +231,20 @@ function main()
     set_counter!(rng, 1)
 
     d            = 20
-    μ            = Fill(3, d)
+    μ            = Fill(10, d)
     logtarget(x) = logpdf(MvNormal(μ, I), x)
-    n_episodes   = 3
+    n_episodes   = 5
     
     μ0           = Zeros(d)
-    Σ0           = 3*Eye(d)
+    Σ0           = Eye(d)
     proposal     = MvNormal(μ0, Σ0)
 
-    #h0    = 5e-2
-    #hT    = 5e-3
-    h0    = hT = 0.3
+    #h0    = 0.5
+    #hT    = 0.05
+    h0    = hT = 0.5
     Γ     = Diagonal(ones(d))
 
-    n_iters  = 32
+    n_iters  = 64
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
@@ -276,13 +276,52 @@ function main()
     end
     logZ = [first(r) for r in res]
     violin!( fill(1, length(logZ)), logZ, fillcolor=:blue, alpha=0.2, label="SMC N=$(n_particles)") |> display
-    dotplot!(fill(1, length(logZ)), logZ, markercolor=:blue) |> display
+    dotplot!(fill(1, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
 
     logZ = [r[2] for r in res]
     violin!( fill(2, length(logZ)), logZ, fillcolor=:red, alpha=0.2, label="CSMC N=$(n_particles) J=0") |> display
-    dotplot!(fill(2, length(logZ)), logZ, markercolor=:red) |> display
+    dotplot!(fill(2, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
 
     logZ = [last(r) for r in res]
     violin!( fill(3, length(logZ)), logZ, fillcolor=:red, alpha=0.2, label="CSMC N=$(n_particles) J=$(n_episodes)") |> display
-    dotplot!(fill(3, length(logZ)), logZ, markercolor=:red) |> display
+    dotplot!(fill(3, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
+end
+
+function visualize()
+    seed = (0x38bef07cf9cc549d, 0x49e2430080b3f797)
+    rng  = Philox4x(UInt64, seed, 8)
+    set_counter!(rng, 1)
+
+    d            = 10
+    μ            = Fill(5, d)
+    logtarget(x) = logpdf(MvNormal(μ, I), x)
+    n_episodes   = 10
+    
+    μ0           = Zeros(d)
+    Σ0           = Eye(d)
+    proposal     = MvNormal(μ0, Σ0)
+
+    #h0    = 5e-2
+    #hT    = 5e-3
+    h0    = hT = 0.5
+    Γ     = Diagonal(ones(d))
+    n_iters  = 32
+    schedule = range(0, 1; length=n_iters)
+
+    csmc = CSMCULA(
+        Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
+    )
+
+    Plots.plot() |> display
+
+    n_particles = 256
+    xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
+    stats_csmc                  = stats_csmc_init
+    for _ in 1:n_episodes
+        csmc                   = optimize_policy(csmc, logtarget, states)
+        xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
+
+        bs = [twist.b[[1,2]] for twist in csmc.policy]
+        Plots.plot!([b[1] for b in bs], [b[2] for b in bs]) |> display
+    end
 end
