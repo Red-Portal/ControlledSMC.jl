@@ -89,8 +89,8 @@ function euler_bwd(logtarget, x, h, Γ)
 end
 
 function leapfrog(logtarget, x, ν, h, M)
-    ν = ν - h/2*ForwardDiff.gradient(logtarget, x)
-    x = x + h*(M\ν)
-    ν = ν - h/2*ForwardDiff.gradient(logtarget, x)
+    ν = ν + h/2*ForwardDiff.gradient(logtarget, x)
+    x = x - h*(M\ν)
+    ν = ν + h/2*ForwardDiff.gradient(logtarget, x)
     x, ν
 end

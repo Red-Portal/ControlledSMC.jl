@@ -15,88 +15,73 @@ using Random123
 include("common.jl")
 include("sample.jl")
 
-struct SMCULA{
+struct SMCUHA{
     G    <: AbstractMatrix,
     H    <: Real,
     B    <: AbstractBackwardKernel,
     Prop <: MultivariateDistribution,
     Path <: AnnealingPath,
 } <: AbstractSMC
-    Γ        ::G
-    h0       ::H
-    hT       ::H
+    M        ::G
+    δ0       ::H
+    δT       ::H
     backward ::B
     proposal ::Prop
     path     ::Path
 end
 
-Base.length(sampler::SMCULA) = length(sampler.path)
+Base.length(sampler::SMCUHA) = length(sampler.path)
 
-function mutate(
+function rand_initial_with_potential(
+    rng        ::Random.AbstractRNG,
+    sampler    ::SMCUHA,
+               ::Any,
+    n_particles::Int,
+)
+    (; proposal, M) = sampler
+    q = rand(rng, proposal, n_particles)
+    d = size(q, 1)
+    p = rand(rng, MvNormal(Zeros(d), M), n_particles)
+    x = vcat(q, p)
+    ℓG = zeros(n_particles)
+    x, ℓG
+end
+
+function mutate_with_potential(
     rng       ::Random.AbstractRNG,
-    sampler   ::SMCULA,
+    sampler   ::SMCUHA,
     t         ::Int,
     x         ::AbstractMatrix,
-    logtarget
-)
-    (; path, h0, hT, Γ, proposal) = sampler
-    logπt(x) = annealed_logtarget(path, t, x, proposal, logtarget)
-    ht = anneal(path, t, h0, hT)
-    q  = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
-    q + sqrt(ht)*unwhiten(Γ, randn(rng, size(q)))
-end
-
-function potential(
-    sampler   ::SMCULA,
-    t         ::Int,
-    x_curr    ::AbstractMatrix,
-    x_prev    ::AbstractMatrix,
     logtarget,
 )
-    potential_with_backward(
-        sampler, sampler.backward, t, x_curr, x_prev, logtarget
-    )
-end
+    (; path, δ0, δT, M, proposal) = sampler
+    logπt(x_)   = annealed_logtarget(path, t,   x_, proposal, logtarget)
+    logπtm1(x_) = annealed_logtarget(path, t-1, x_, proposal, logtarget)
+    δt = anneal(path, t, δ0, δT)
 
-function potential_with_backward(
-    sampler   ::SMCULA,
-              ::DetailedBalance,
-    t         ::Int,
-    x_curr    ::AbstractMatrix,
-    x_prev    ::AbstractMatrix,
-    logtarget,
-)
-    (; proposal, path)   = sampler
+    d      = size(x, 1) ÷ 2
+    n      = size(x, 2)
+    q, p   = x[1:d,:], x[d+1:end,:]
+    h      = 0.9
+    phalf  = h*p + sqrt(1 - h^2)*unwhiten(M, randn(rng, size(p)))
+    p_dist = MvNormal(Zeros(d), M)
+    
+    res = map(1:n) do i
+        pi, qi  = p[:,i], q[:,i]
+        pihalf  = phalf[:,i]
+        qi′, pi′ = leapfrog(logπt, qi, pihalf, δt, M)
+        xi′     = vcat(qi′, pi′)
 
-    logπt(x)   = annealed_logtarget(path,   t, x, proposal, logtarget)
-    logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
+        ℓGi = logπt(qi′) - logπtm1(qi) +
+            logpdf(p_dist, pi′) - logpdf(p_dist, pi) +
+            logpdf(MvNormal(h*pihalf, (1 - h^2)*M), pi) +
+            -logpdf(MvNormal(h*pi, (1 - h^2)*M), pihalf)
 
-    ℓπt_xtm1   = map(xi -> logπt(xi),   eachcol(x_prev))
-    ℓπtm1_xtm1 = map(xi -> logπtm1(xi), eachcol(x_prev))
-    ℓπt_xtm1 - ℓπtm1_xtm1
-end
-
-function potential_with_backward(
-    sampler   ::SMCULA,
-              ::ForwardKernel,
-    t         ::Int,
-    x_curr    ::AbstractMatrix,
-    x_prev    ::AbstractMatrix,
-    logtarget,
-)
-    (; proposal, h0, hT, Γ, path) = sampler
-
-    ht   = anneal(path, t, h0, hT)
-    htm1 = anneal(path, t-1, h0, hT)
-    logπt(x)   = annealed_logtarget(path, t,   x, proposal, logtarget)
-    logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
-
-    map(eachcol(x_curr), eachcol(x_prev)) do xi_curr, xi_prev
-        K = MvNormal(euler_fwd(logπt,   xi_prev, ht,   Γ), ht*Γ)
-        L = MvNormal(euler_fwd(logπtm1, xi_curr, htm1, Γ), htm1*Γ)
-        (logπt(xi_curr) + logpdf(L, xi_prev)) -
-            (logπtm1(xi_prev) + logpdf(K, xi_curr))
+        xi′, ℓGi
     end
+    x′ = hcat([first(r) for r in res]...)
+    ℓG = [last(r) for r in res]
+    x′, ℓG, NamedTuple()
 end
 
 function main()
@@ -112,9 +97,9 @@ function main()
     Σ0           = Eye(d)
     proposal     = MvNormal(μ0, Σ0)
 
-    #h0    = 5e-2
-    #hT    = 5e-3
-    h0    = hT = 2.0
+    #δ0    = 5e-2
+    #δT    = 5e-3
+    δ0    = δT = 0.05
 
     Γ     = Eye(d)
 
@@ -123,16 +108,16 @@ function main()
 
     hline([0.0], label="True logZ") |> display
 
-    sampler = SMCULA(
+    sampler = SMCUHA(
         Γ,
-        h0,
-        hT,
+        δ0,
+        δT,
         ForwardKernel(),
         proposal,
         AnnealingPath(schedule)
     )
 
-    particles = [32, 64, 128, 256, 512, 1024]
+    particles = [32, 64, 128, 256]#, 512, 1024]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
             xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
@@ -145,7 +130,7 @@ function main()
         dotplot!(fill(2*idx-1, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
     end
 
-    # sampler = SMCULA(
+    # sampler = SMCUHA(
     #     Γ,
     #     h0,
     #     hT,
