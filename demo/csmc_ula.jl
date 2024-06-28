@@ -16,7 +16,7 @@ using Statistics
 
 include("common.jl")
 include("sample.jl")
-include("smc.jl")
+include("smc_ula.jl")
 
 struct CSMCULA{S <: SMCULA, P <: AbstractVector} <: AbstractSMC
     smc   ::S
