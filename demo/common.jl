@@ -87,3 +87,10 @@ function euler_bwd(logtarget, x, h, Γ)
     ∇logπt = ForwardDiff.gradient(logtarget, x)
     x - h/2*Γ*∇logπt
 end
+
+function leapfrog(logtarget, x, ν, h, M)
+    ν = ν - h/2*ForwardDiff.gradient(logtarget, x)
+    x = x + h*(M\ν)
+    ν = ν - h/2*ForwardDiff.gradient(logtarget, x)
+    x, ν
+end

@@ -79,70 +79,54 @@ function twist_logdensity(twist, x)
     -quad(Diagonal(a), x) - (b'*x)[1,:] .- c   
 end
 
-function rand_initial_particles(
+function rand_initial_with_potential(
     rng        ::Random.AbstractRNG,
     sampler    ::CSMCULA,
+    logtarget,
     n_particles::Int,
 )
     (; policy, smc) = sampler 
+    ψ0       = first(policy)
     proposal = smc.proposal
     μ, Σ     = mean(proposal), Distributions._cov(proposal)
-    rand_twist_mvnormal(
-        rng, first(policy), repeat(μ, 1, n_particles), diag(Σ)
-    )
-end
+    x        = rand_twist_mvnormal(rng, ψ0, repeat(μ, 1, n_particles), diag(Σ))
 
-function potential_init(
-    sampler ::CSMCULA,
-    x       ::AbstractMatrix,
-    logtarget
-)
-    (; smc, policy) = sampler
-    ψ0 = first(policy)
-
-    μ    = mean(smc.proposal)
-    Σ    = Distributions._cov(smc.proposal)
     ℓG0  = 0.0
     ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ, diag(Σ))
     ℓψ0  = twist_logdensity(ψ0, x)
     ℓMψ  = twist_kernel_logmarginal(smc, policy[2], 2, logtarget, x)
+    ℓGψ  = @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
 
-    @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
+    x, ℓGψ
 end
 
-function mutate(
+function mutate_with_potential(
     rng       ::Random.AbstractRNG,
     sampler   ::CSMCULA,
     t         ::Int,
     x         ::AbstractMatrix,
     logtarget
 )
-    (; path, h0, hT, Γ, proposal) = sampler.smc
+    (; policy, smc) = sampler
+    (; path, h0, hT, Γ, proposal) = smc
     logπt(x) = annealed_logtarget(path, t, x, proposal, logtarget)
     ht = anneal(path, t, h0, hT)
-    q  = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
-    rand_twist_mvnormal(rng, sampler.policy[t], q, ht*diag(Γ))
-end
 
-function potential(
-    sampler   ::CSMCULA,
-    t         ::Int,
-    x_curr    ::AbstractMatrix,
-    x_prev    ::AbstractMatrix,
-    logtarget,
-)
-    (; smc, policy) = sampler
+    ψ = policy[t]
+    q = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
+    x′ = rand_twist_mvnormal(rng, ψ, q, ht*diag(Γ))
 
-    ℓG = potential(smc, t, x_curr, x_prev, logtarget)
-    ℓψ = twist_logdensity(policy[t], x_curr)
-    T  = length(smc)
-
-    if t < T
-        ℓMψ = twist_kernel_logmarginal(smc, policy[t+1], t+1, logtarget, x_curr)
+    ℓG   = potential(smc, t, x′, x, logtarget)
+    ℓψ   = twist_logdensity(ψ, x′)
+    T    = length(smc)
+    ℓGψ  = if t < T
+        ψtp1 = policy[t+1]
+        ℓMψ  = twist_kernel_logmarginal(smc, ψtp1, t+1, logtarget, x′)
         @. ℓG + ℓMψ - ℓψ
     elseif t == T
         @. ℓG - ℓψ
     end
+    x′, ℓGψ, (q=q,)
 end
 
 function fit_quadratic(x, y)
@@ -151,7 +135,7 @@ function fit_quadratic(x, y)
 
     X   = vcat(x.^2, x, ones(1, n))' |> Array
     β   = ones(2*d + 1)
-    ϵ   = eps(eltype(x))
+    ϵ   = 1e-5 #eps(eltype(x))
     Xty = X'*y
     XtX = Hermitian(X'*X)
 
@@ -196,12 +180,11 @@ function optimize_policy(sampler, logtarget, states)
             twist_prev     = policy_prev[t+1]
             a_prev, b_prev = twist_prev.a, twist_prev.b
 
-            logπtp1(x) = annealed_logtarget(path, t+1, x, proposal, logtarget)
             htp1       = anneal(path, t+1, h0, hT)
-            q          = mapslices(xi -> euler_fwd(logπtp1, xi, htp1, Γ), particles, dims=1)
+            qtp1       = states[t+1].q
             γ          = diag(Γ)
             K          = Diagonal(@. 1/(2*htp1*a_prev + 1/γ))
-            μ_twisted  = K*(Γ\q .- htp1*b_prev)
+            μ_twisted  = K*(Γ\qtp1 .- htp1*b_prev)
             Σ_twisted  = htp1*K
             σ_twisted  = diag(Σ_twisted)
             logM       = twist_mvnormal_logmarginal(twist_recur, μ_twisted, σ_twisted)
@@ -241,16 +224,16 @@ function main()
 
     #h0    = 0.5
     #hT    = 0.05
-    h0    = hT = 0.5
+    h0    = hT = 0.3
     Γ     = Diagonal(ones(d))
 
-    n_iters  = 64
+    n_iters  = 32
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
 
     n_particles = 256
-    res = @showprogress map(1:16) do _
+    res = @showprogress map(1:64) do _
         smc = SMCULA(
             Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
         )
@@ -303,7 +286,7 @@ function visualize()
 
     #h0    = 5e-2
     #hT    = 5e-3
-    h0    = hT = 0.5
+    h0    = hT = 0.2
     Γ     = Diagonal(ones(d))
     n_iters  = 32
     schedule = range(0, 1; length=n_iters)

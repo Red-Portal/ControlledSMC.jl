@@ -32,7 +32,7 @@ end
 
 Base.length(sampler::SMCULA) = length(sampler.path)
 
-function mutate(
+function mutate_with_potential(
     rng       ::Random.AbstractRNG,
     sampler   ::SMCULA,
     t         ::Int,
@@ -43,7 +43,9 @@ function mutate(
     logπt(x) = annealed_logtarget(path, t, x, proposal, logtarget)
     ht = anneal(path, t, h0, hT)
     q  = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
-    q + sqrt(ht)*unwhiten(Γ, randn(rng, size(q)))
+    x′ = q + sqrt(ht)*unwhiten(Γ, randn(rng, size(q)))
+    ℓG = potential(sampler, t, x′, x, logtarget)
+    x′, ℓG, NamedTuple()
 end
 
 function potential(
@@ -54,7 +56,7 @@ function potential(
     logtarget,
 )
     potential_with_backward(
-        sampler, sampler.backward, t, x_curr, x_prev, logtarget
+        sampler, sampler.backward, t, x_curr, x_prev, logtarget,
     )
 end
 
@@ -114,11 +116,11 @@ function main()
 
     #h0    = 5e-2
     #hT    = 5e-3
-    h0    = hT = 2.0
+    h0    = hT = 0.5
 
     Γ     = Eye(d)
 
-    n_iters  = 16
+    n_iters  = 32
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
@@ -132,7 +134,7 @@ function main()
         AnnealingPath(schedule)
     )
 
-    particles = [32, 64, 128, 256, 512, 1024]
+    particles = [32, 64, 128, 256, 512]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
             xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
@@ -145,21 +147,21 @@ function main()
         dotplot!(fill(2*idx-1, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
     end
 
-    # sampler = SMCULA(
-    #     Γ,
-    #     h0,
-    #     hT,
-    #     DetailedBalance(),
-    #     proposal,
-    #     AnnealingPath(schedule)
-    # )
-    # for (idx, n_particles) in enumerate(particles)
-    #     res = @showprogress map(1:64) do _
-    #         xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
-    #         (mean(xs, dims=2)[:,1], last(stats).logZ)
-    #     end
-    #     logZ = [last(r) for r in res]
-    #     violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red, alpha=0.2, label="N=$(n_particles)") |> display
-    #     dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
-    # end
+    sampler = SMCULA(
+        Γ,
+        h0,
+        hT,
+        DetailedBalance(),
+        proposal,
+        AnnealingPath(schedule)
+    )
+    for (idx, n_particles) in enumerate(particles)
+        res = @showprogress map(1:64) do _
+            xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
+            (mean(xs, dims=2)[:,1], last(stats).logZ)
+        end
+        logZ = [last(r) for r in res]
+        violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red, alpha=0.2, label="N=$(n_particles)") |> display
+        dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
+    end
 end
