@@ -25,6 +25,7 @@ struct SMCUHA{
     M        ::G
     δ0       ::H
     δT       ::H
+    h        ::H
     backward ::B
     proposal ::Prop
     path     ::Path
@@ -54,34 +55,43 @@ function mutate_with_potential(
     x         ::AbstractMatrix,
     logtarget,
 )
-    (; path, δ0, δT, M, proposal) = sampler
+    (; path, δ0, δT, h, M, proposal) = sampler
     logπt(x_)   = annealed_logtarget(path, t,   x_, proposal, logtarget)
     logπtm1(x_) = annealed_logtarget(path, t-1, x_, proposal, logtarget)
     δt = anneal(path, t, δ0, δT)
 
     d      = size(x, 1) ÷ 2
-    n      = size(x, 2)
     q, p   = x[1:d,:], x[d+1:end,:]
-    h      = 0.9
-    phalf  = h*p + sqrt(1 - h^2)*unwhiten(M, randn(rng, size(p)))
     p_dist = MvNormal(Zeros(d), M)
-    
-    res = map(1:n) do i
-        pi, qi  = p[:,i], q[:,i]
-        pihalf  = phalf[:,i]
-        qi′, pi′ = leapfrog(logπt, qi, pihalf, δt, M)
-        xi′     = vcat(qi′, pi′)
 
-        ℓGi = logπt(qi′) - logπtm1(qi) +
-            logpdf(p_dist, pi′) - logpdf(p_dist, pi) +
-            logpdf(MvNormal(h*pihalf, (1 - h^2)*M), pi) +
-            -logpdf(MvNormal(h*pi, (1 - h^2)*M), pihalf)
+    phalf = h*p + sqrt(1 - h^2)*unwhiten(M, randn(rng, size(p)))
+    q′, p′ = leapfrog(logπt, q, phalf, δt, M)
+    x′     = vcat(q′, p′)
 
-        xi′, ℓGi
-    end
-    x′ = hcat([first(r) for r in res]...)
-    ℓG = [last(r) for r in res]
+    ℓπt     = logπt.(eachcol(q′)) 
+    ℓπtm1   = logπtm1.(eachcol(q)) 
+    ℓauxt   = logpdf.(Ref(p_dist), eachcol(p′))
+    ℓauxtm1 = logpdf.(Ref(p_dist), eachcol(p))
+    B       = MvNormal.(h*eachcol(phalf), Ref((1 - h^2)*M))
+    F       = MvNormal.(h*eachcol(p),     Ref((1 - h^2)*M))
+    ℓB      = logpdf.(B, eachcol(p))
+    ℓF      = logpdf.(F, eachcol(phalf))
+    ℓG      = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓB - ℓF
     x′, ℓG, NamedTuple()
+end
+
+function underdamped_langevin(rng, logtarget, h, δ, q, M, n_samples)
+    d      = length(q)
+    p_dist = MvNormal(Zeros(d), M)
+    p      = rand(rng, p_dist)
+
+    qs = zeros(d, n_samples)
+    for i in 1:n_samples
+        phalf = h*p + sqrt(1 - h^2)*randn(rng, d)
+        q, p  = leapfrog(logtarget, q, phalf, δ, M)
+        qs[:,i] = q
+    end
+    qs
 end
 
 function main()
@@ -92,26 +102,27 @@ function main()
     d            = 20
     μ            = Fill(10, d)
     logtarget(x) = logpdf(MvNormal(μ, I), x)
-    
+
     μ0           = Zeros(d)
     Σ0           = Eye(d)
     proposal     = MvNormal(μ0, Σ0)
 
     #δ0    = 5e-2
     #δT    = 5e-3
-    δ0    = δT = 0.05
+    δ0    = δT = 1.0
+    h     = 0.8
+    M     = Eye(d)
 
-    Γ     = Eye(d)
-
-    n_iters  = 16
+    n_iters  = 32
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
 
     sampler = SMCUHA(
-        Γ,
+        M,
         δ0,
         δT,
+        h,
         ForwardKernel(),
         proposal,
         AnnealingPath(schedule)

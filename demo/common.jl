@@ -88,9 +88,11 @@ function euler_bwd(logtarget, x, h, Γ)
     x - h/2*Γ*∇logπt
 end
 
-function leapfrog(logtarget, x, ν, h, M)
-    ν = ν + h/2*ForwardDiff.gradient(logtarget, x)
-    x = x - h*(M\ν)
-    ν = ν + h/2*ForwardDiff.gradient(logtarget, x)
-    x, ν
+function leapfrog(logtarget, q, p, δ, M)
+    n∇U = mapslices(Base.Fix1(ForwardDiff.gradient, logtarget), q, dims=1)
+    p′   = p + δ/2*n∇U
+    q′   = q + δ*(M\p′)
+    n∇U′ = mapslices(Base.Fix1(ForwardDiff.gradient, logtarget), q′, dims=1)
+    p′′   = p′ + δ/2*n∇U′
+    q′, p′′
 end

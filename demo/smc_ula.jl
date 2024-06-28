@@ -69,12 +69,10 @@ function potential_with_backward(
     logtarget,
 )
     (; proposal, path)   = sampler
-
     logπt(x)   = annealed_logtarget(path,   t, x, proposal, logtarget)
     logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
-
-    ℓπt_xtm1   = map(xi -> logπt(xi),   eachcol(x_prev))
-    ℓπtm1_xtm1 = map(xi -> logπtm1(xi), eachcol(x_prev))
+    ℓπt_xtm1   = logπt.(eachcol(x_prev))
+    ℓπtm1_xtm1 = logπtm1.(eachcol(x_prev))
     ℓπt_xtm1 - ℓπtm1_xtm1
 end
 
@@ -93,12 +91,15 @@ function potential_with_backward(
     logπt(x)   = annealed_logtarget(path, t,   x, proposal, logtarget)
     logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
 
-    map(eachcol(x_curr), eachcol(x_prev)) do xi_curr, xi_prev
-        K = MvNormal(euler_fwd(logπt,   xi_prev, ht,   Γ), ht*Γ)
-        L = MvNormal(euler_fwd(logπtm1, xi_curr, htm1, Γ), htm1*Γ)
-        (logπt(xi_curr) + logpdf(L, xi_prev)) -
-            (logπtm1(xi_prev) + logpdf(K, xi_curr))
-    end
+    q_fwd = euler_fwd.(logπt,   eachcol(x_prev), ht,   Ref(Γ))
+    q_bwd = euler_fwd.(logπtm1, eachcol(x_curr), htm1, Ref(Γ))
+    K     = MvNormal.(q_fwd, Ref(ht*Γ))
+    L     = MvNormal.(q_bwd, Ref(htm1*Γ))
+    ℓK    = logpdf.(K, eachcol(x_curr))
+    ℓL    = logpdf.(L, eachcol(x_prev))
+    ℓπt   = logπt.(  eachcol(x_curr))
+    ℓπtm1 = logπtm1.(eachcol(x_prev))
+    ℓπt + ℓL - ℓπtm1 - ℓK
 end
 
 function main()
@@ -116,7 +117,7 @@ function main()
 
     #h0    = 5e-2
     #hT    = 5e-3
-    h0    = hT = 0.5
+    h0    = hT = 1.0
 
     Γ     = Eye(d)
 
