@@ -15,8 +15,10 @@ using SimpleUnPack
 using Statistics
 
 include("common.jl")
+include("mcmc.jl")
 include("sample.jl")
 include("smc_ula.jl")
+include("twist.jl")
 
 struct CSMCULA{S <: SMCULA, P <: AbstractVector} <: AbstractSMC
     smc   ::S
@@ -39,44 +41,12 @@ function CSMCULA(
     CSMCULA{typeof(smc), typeof(policy)}(smc, policy)
 end
 
-function rand_twist_mvnormal(
-    rng    ::Random.AbstractRNG,
-    twist,
-    μs     ::AbstractMatrix,
-    σ      ::AbstractVector,
-)
-    (; a, b,)  = twist
-    K          = Diagonal(@. 1/(2*a + 1/σ))
-    Σ          = Diagonal(σ)
-    μs_twisted = K*(Σ\μs .- b)
-    μs_twisted + unwhiten(K, randn(rng, size(μs)))
-end
-
-function twist_mvnormal_logmarginal(
-    twist,
-    μ     ::AbstractArray,
-    σ     ::AbstractVector
-)
-    (; a, b, c)  = twist
-    Σ     = Diagonal(σ)
-    K     = Diagonal(@. 1/(2*a + 1/σ))
-    ℓdetΣ = logdet(Σ)
-    ℓdetK = logdet(K)
-    z     = Σ\μ .- b
-    ((-ℓdetΣ + ℓdetK) .+ (quad(K, z) - invquad(Σ, μ)))/2 .- c
-end
-
 function twist_kernel_logmarginal(smc::SMCULA, twist, t, logtarget, x)
     (; path, h0, hT, Γ, proposal) = smc
     logπt(x) = annealed_logtarget(path, t, x, proposal, logtarget)
     ht    = anneal(path, t, h0, hT)
     q     = mapslices(xi -> euler_fwd(logπt, xi, ht, Γ), x, dims=1)
     twist_mvnormal_logmarginal(twist, q, ht*diag(Γ))
-end
-
-function twist_logdensity(twist, x)
-    (; a, b, c) = twist
-    -quad(Diagonal(a), x) - (b'*x)[1,:] .- c   
 end
 
 function rand_initial_with_potential(
@@ -127,38 +97,6 @@ function mutate_with_potential(
         @. ℓG - ℓψ
     end
     x′, ℓGψ, (q=q,)
-end
-
-function fit_quadratic(x, y)
-    d, n = size(x,1), size(x,2)
-    @assert size(x,2) == length(y)
-
-    X   = vcat(x.^2, x, ones(1, n))' |> Array
-    β   = ones(2*d + 1)
-    ϵ   = 1e-5 #eps(eltype(x))
-    Xty = X'*y
-    XtX = Hermitian(X'*X)
-
-    func(β_) = sum(abs2, X*β_ - y)
-    function grad!(g, β_)
-        g[:] = 2*(XtX*β_ - Xty)
-    end
-    function hess!(H, β_)
-        H[:,:] = 2*XtX
-    end
-    df    = TwiceDifferentiable(func, grad!, hess!, β)
-
-    lower = vcat(fill(ϵ, d), fill(-Inf, d+1))
-    upper = fill(Inf, 2*d+1)
-    dfc   = TwiceDifferentiableConstraints(lower, upper)
-    res   = optimize(df, dfc, β, IPNewton())
-
-    β = Optim.minimizer(res)
-    a = β[1:d]
-    b = β[d+1:2*d]
-    c = β[end]
-    
-    a, b, c, sum(abs2, X*β - y)
 end
 
 function optimize_policy(sampler, logtarget, states)
@@ -227,7 +165,7 @@ function main()
     h0    = hT = 0.3
     Γ     = Diagonal(ones(d))
 
-    n_iters  = 32
+    n_iters  = 128
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display

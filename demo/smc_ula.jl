@@ -13,6 +13,7 @@ using FillArrays
 using Random123
 
 include("common.jl")
+include("mcmc.jl")
 include("sample.jl")
 
 struct SMCULA{

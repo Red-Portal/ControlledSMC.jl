@@ -14,6 +14,7 @@ using Random123
 
 include("common.jl")
 include("sample.jl")
+include("mcmc.jl")
 
 struct SMCUHA{
     G    <: AbstractMatrix,
@@ -109,14 +110,14 @@ function main()
 
     #δ0    = 5e-2
     #δT    = 5e-3
-    δ0    = δT = 1.0
+    δ0    = δT = 0.5
     h     = 0.5
     M     = Eye(d)
 
     #qs = underdamped_langevin(rng, logtarget, h, δ0, randn(rng, d), M, 1000)
     #return Plots.plot(qs[1,:], qs[2,:], marker=:circle)
 
-    n_iters  = 32
+    n_iters  = 128
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
@@ -131,7 +132,7 @@ function main()
         AnnealingPath(schedule)
     )
 
-    particles = [32, 64, 128, 256, 512, 1024]
+    particles = [32, 64, 128, 256,]# 512, 1024]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
             xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
