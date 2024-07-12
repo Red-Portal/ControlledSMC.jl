@@ -99,7 +99,7 @@ function mutate_with_potential(
     x′, ℓGψ, (q=q,)
 end
 
-function optimize_policy(sampler, logtarget, states)
+function optimize_policy(sampler::CSMCULA, states)
     smc = sampler.smc
     (; path, h0, hT, Γ, proposal) = smc
 
@@ -165,7 +165,7 @@ function main()
     h0    = hT = 0.3
     Γ     = Diagonal(ones(d))
 
-    n_iters  = 128
+    n_iters  = 32
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
@@ -184,7 +184,7 @@ function main()
         xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
         stats_csmc                  = stats_csmc_init
         for _ in 1:n_episodes
-            csmc                   = optimize_policy(csmc, logtarget, states)
+            csmc                   = optimize_policy(csmc, states)
             xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
         end
 
@@ -239,7 +239,7 @@ function visualize()
     xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
     stats_csmc                  = stats_csmc_init
     for _ in 1:n_episodes
-        csmc                   = optimize_policy(csmc, logtarget, states)
+        csmc                   = optimize_policy(csmc, states)
         xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
 
         bs = [twist.b[[1,2]] for twist in csmc.policy]
