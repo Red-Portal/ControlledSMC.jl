@@ -34,6 +34,8 @@ struct DetailedBalance <: AbstractBackwardKernel end
 
 struct ForwardKernel <: AbstractBackwardKernel end
 
+struct PastForwardKernel <: AbstractBackwardKernel end
+
 function systematic_sampling(rng, weights::AbstractVector, n_resample=length(weights))
     N  = length(weights)
     Δs = 1/n_resample

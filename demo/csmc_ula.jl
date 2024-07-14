@@ -152,9 +152,10 @@ function main()
     set_counter!(rng, 1)
 
     d            = 20
-    μ            = Fill(10, d)
-    logtarget(x) = logpdf(MvNormal(μ, I), x)
-    n_episodes   = 5
+    μ            = Fill(2, d)
+    Σ            = fill(0.1, d, d) + I
+    logtarget(x) = logpdf(MvNormal(μ, Σ), x)
+    n_episodes   = 3
     
     μ0           = Zeros(d)
     Σ0           = Eye(d)
@@ -162,21 +163,21 @@ function main()
 
     #h0    = 0.5
     #hT    = 0.05
-    h0    = hT = 0.3
+    h0    = hT = 0.5
     Γ     = Diagonal(ones(d))
 
-    n_iters  = 32
+    n_iters  = 16
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
 
     n_particles = 256
-    res = @showprogress map(1:64) do _
+    res = @showprogress map(1:16) do _
         smc = SMCULA(
-            Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
+            Γ, h0, hT, PastForwardKernel(), proposal, AnnealingPath(schedule), 
         )
         csmc = CSMCULA(
-            Γ, h0, hT, ForwardKernel(), proposal, AnnealingPath(schedule), 
+            Γ, h0, hT, PastForwardKernel(), proposal, AnnealingPath(schedule), 
         )
 
         xs, _, stats_smc = sample(rng, smc, n_particles, 0.5, logtarget)

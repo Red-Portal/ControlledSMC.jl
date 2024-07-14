@@ -79,7 +79,7 @@ end
 
 function potential_with_backward(
     sampler   ::SMCULA,
-              ::ForwardKernel,
+              ::PastForwardKernel,
     t         ::Int,
     x_curr    ::AbstractMatrix,
     x_prev    ::AbstractMatrix,
@@ -96,6 +96,31 @@ function potential_with_backward(
     q_bwd = euler_fwd.(logπtm1, eachcol(x_curr), htm1, Ref(Γ))
     K     = MvNormal.(q_fwd, Ref(ht*Γ))
     L     = MvNormal.(q_bwd, Ref(htm1*Γ))
+    ℓK    = logpdf.(K, eachcol(x_curr))
+    ℓL    = logpdf.(L, eachcol(x_prev))
+    ℓπt   = logπt.(  eachcol(x_curr))
+    ℓπtm1 = logπtm1.(eachcol(x_prev))
+    ℓπt + ℓL - ℓπtm1 - ℓK
+end
+
+function potential_with_backward(
+    sampler   ::SMCULA,
+              ::ForwardKernel,
+    t         ::Int,
+    x_curr    ::AbstractMatrix,
+    x_prev    ::AbstractMatrix,
+    logtarget,
+)
+    (; proposal, h0, hT, Γ, path) = sampler
+
+    ht = anneal(path, t, h0, hT)
+    logπt(x)   = annealed_logtarget(path, t,   x, proposal, logtarget)
+    logπtm1(x) = annealed_logtarget(path, t-1, x, proposal, logtarget)
+
+    q_fwd = euler_fwd.(logπt, eachcol(x_prev), ht, Ref(Γ))
+    q_bwd = euler_fwd.(logπt, eachcol(x_curr), ht, Ref(Γ))
+    K     = MvNormal.(q_fwd, Ref(ht*Γ))
+    L     = MvNormal.(q_bwd, Ref(ht*Γ))
     ℓK    = logpdf.(K, eachcol(x_curr))
     ℓL    = logpdf.(L, eachcol(x_prev))
     ℓπt   = logπt.(  eachcol(x_curr))
@@ -131,6 +156,28 @@ function main()
         Γ,
         h0,
         hT,
+        PastForwardKernel(),
+        proposal,
+        AnnealingPath(schedule)
+    )
+
+    particles = [32, 64, 128, 256, 512]
+    for (idx, n_particles) in enumerate(particles)
+        res = @showprogress map(1:64) do _
+            xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
+            (mean(xs, dims=2)[:,1], last(stats).logZ)
+        end
+
+        logZ = [last(r) for r in res]
+
+        violin!( fill(3*idx-2, length(logZ)), logZ, fillcolor  =:blue, alpha=0.2, label="N=$(n_particles)") |> display
+        dotplot!(fill(3*idx-2, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
+    end
+
+    sampler = SMCULA(
+        Γ,
+        h0,
+        hT,
         ForwardKernel(),
         proposal,
         AnnealingPath(schedule)
@@ -145,8 +192,8 @@ function main()
 
         logZ = [last(r) for r in res]
 
-        violin!( fill(2*idx-1, length(logZ)), logZ, fillcolor  =:blue, alpha=0.2, label="N=$(n_particles)") |> display
-        dotplot!(fill(2*idx-1, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
+        violin!( fill(3*idx-1, length(logZ)), logZ, fillcolor  =:green, alpha=0.2, label="N=$(n_particles)") |> display
+        dotplot!(fill(3*idx-1, length(logZ)), logZ, markercolor=:green, label=nothing) |> display
     end
 
     sampler = SMCULA(
@@ -163,7 +210,7 @@ function main()
             (mean(xs, dims=2)[:,1], last(stats).logZ)
         end
         logZ = [last(r) for r in res]
-        violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red, alpha=0.2, label="N=$(n_particles)") |> display
-        dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
+        violin!( fill(3*idx, length(logZ)), logZ, fillcolor  =:red, alpha=0.2, label="N=$(n_particles)") |> display
+        dotplot!(fill(3*idx, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
     end
 end

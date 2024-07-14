@@ -49,6 +49,23 @@ function rand_initial_with_potential(
     x, ℓG
 end
 
+function backward_kernel(
+    ::ForwardKernel, sampler::SMCUHA, logtarget, t, q′, p′, phalf
+)
+    (; h, M) = sampler
+    MvNormal.(h*eachcol(phalf), Ref((1 - h^2)*M))
+end
+
+function backward_kernel(
+    ::PastForwardKernel, sampler::SMCUHA, logtarget, t, q′, p′, phalf
+)
+    (; path, δ0, δT, h, M, proposal) = sampler
+    δt = anneal(path, t, δ0, δT)
+    logπtm1(x_) = annealed_logtarget(path, t-1, x_, proposal, logtarget)
+    _, pback = leapfrog(logπtm1, q′, p′, -δt, M)
+    MvNormal.(h*eachcol(pback), Ref((1 - h^2)*M))
+end
+
 function mutate_with_potential(
     rng       ::Random.AbstractRNG,
     sampler   ::SMCUHA,
@@ -73,7 +90,7 @@ function mutate_with_potential(
     ℓπtm1   = logπtm1.(eachcol(q)) 
     ℓauxt   = logpdf.(Ref(p_dist), eachcol(p′))
     ℓauxtm1 = logpdf.(Ref(p_dist), eachcol(p))
-    B       = MvNormal.(h*eachcol(phalf), Ref((1 - h^2)*M))
+    B       = backward_kernel(sampler.backward, sampler, logtarget, t, q′, p′, phalf)
     F       = MvNormal.(h*eachcol(p),     Ref((1 - h^2)*M))
     ℓB      = logpdf.(B, eachcol(p))
     ℓF      = logpdf.(F, eachcol(phalf))
@@ -110,14 +127,14 @@ function main()
 
     #δ0    = 5e-2
     #δT    = 5e-3
-    δ0    = δT = 0.5
+    δ0    = δT = 0.8
     h     = 0.5
     M     = Eye(d)
 
     #qs = underdamped_langevin(rng, logtarget, h, δ0, randn(rng, d), M, 1000)
     #return Plots.plot(qs[1,:], qs[2,:], marker=:circle)
 
-    n_iters  = 128
+    n_iters  = 16
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
@@ -145,21 +162,22 @@ function main()
         dotplot!(fill(2*idx-1, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
     end
 
-    # sampler = SMCUHA(
-    #     Γ,
-    #     h0,
-    #     hT,
-    #     DetailedBalance(),
-    #     proposal,
-    #     AnnealingPath(schedule)
-    # )
-    # for (idx, n_particles) in enumerate(particles)
-    #     res = @showprogress map(1:64) do _
-    #         xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
-    #         (mean(xs, dims=2)[:,1], last(stats).logZ)
-    #     end
-    #     logZ = [last(r) for r in res]
-    #     violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red, alpha=0.2, label="N=$(n_particles)") |> display
-    #     dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
-    # end
+    sampler = SMCUHA(
+        M,
+        δ0,
+        δT,
+        h,
+        PastForwardKernel(),
+        proposal,
+        AnnealingPath(schedule)
+    )
+    for (idx, n_particles) in enumerate(particles)
+        res = @showprogress map(1:64) do _
+            xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
+            (mean(xs, dims=2)[:,1], last(stats).logZ)
+        end
+        logZ = [last(r) for r in res]
+        violin!( fill(2*idx, length(logZ)), logZ, fillcolor  =:red, alpha=0.2, label="N=$(n_particles)") |> display
+        dotplot!(fill(2*idx, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
+    end
 end

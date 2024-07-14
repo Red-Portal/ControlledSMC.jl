@@ -39,14 +39,16 @@ function CSMCUHA(
     path    ::AnnealingPath,
 ) where {F<:Real}
     d      = size(M, 1)
-    policy = [(a=zeros(F, d), b=zeros(F, d), c=zero(F)) for _ in 1:length(path)]
+    policy = [(a=zeros(F, 2*d), b=zeros(F, 2*d), c=zero(F)) for _ in 1:length(path)]
     smc    = SMCUHA(M, δ0, δT, h, backward, proposal, path)
     CSMCUHA{typeof(smc), typeof(policy)}(smc, policy)
 end
 
-function twist_kernel_logmarginal(smc::SMCUHA, twist, t, ν)
-    (; h, M,) = smc
-    twist_mvnormal_logmarginal(twist, h*ν, (1 - h^2)*diag(M))
+function twist_kernel_logmarginal(smc::SMCUHA, twist, t, p)
+    (; proposal, h, M,) = smc
+    d   = length(proposal)
+    ψ_p = (a=twist.a[d+1:end], b=twist.b[d+1:end], c=twist.c)
+    twist_mvnormal_logmarginal(ψ_p, h*p, (1 - h^2)*diag(M))
 end
 
 function rand_initial_with_potential(
@@ -60,13 +62,18 @@ function rand_initial_with_potential(
     
     ψ0 = first(policy)
     d  = length(proposal)
-    p  = rand_twist_mvnormal(rng, ψ0, Zeros(d, n_particles), diag(M))
-    q  = rand(rng, proposal, n_particles)
-    x  = vcat(q, p)
+
+    μ  = mean(proposal)
+    Σ  = cov(proposal)
+
+    μ_qp = vcat(repeat(μ, 1, n_particles), zeros(d, n_particles))
+    Σ_qp = vcat(diag(Σ), diag(M))
+    x    = rand_twist_mvnormal(rng, ψ0, μ_qp, Σ_qp)
+    p    = x[d+1:end,:]
 
     ℓG0  = Zeros(n_particles)
-    ℓqψ0 = twist_mvnormal_logmarginal(ψ0, Zeros(d), diag(M))
-    ℓψ0  = twist_logdensity(ψ0, p)
+    ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ_qp, Σ_qp)
+    ℓψ0  = twist_logdensity(ψ0, x)
     ℓMψ  = twist_kernel_logmarginal(smc, policy[2], 2, p)
     ℓGψ  = @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
 
@@ -91,7 +98,8 @@ function mutate_with_potential(
     q, p   = x[1:d,:], x[d+1:end,:]
     p_dist = MvNormal(Zeros(d), M)
 
-    phalf = rand_twist_mvnormal(rng, ψ, h*p, (1 - h^2)*diag(M))
+    ψ_p   = (a=ψ.a[d+1:end], b=ψ.b[d+1:end], c=ψ.c)
+    phalf = rand_twist_mvnormal(rng, ψ_p, h*p, (1 - h^2)*diag(M))
     q′, p′ = leapfrog(logπt, q, phalf, δt, M)
     x′     = vcat(q′, p′)
 
@@ -105,11 +113,10 @@ function mutate_with_potential(
     ℓF      = logpdf.(F, eachcol(phalf))
     ℓG      = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓB - ℓF
 
-    ℓψ   = twist_logdensity(ψ, phalf)
+    ℓψ   = twist_logdensity(ψ, x)
     T    = length(smc)
     ℓGψ  = if t < T
-        ψtp1 = policy[t+1]
-        ℓMψ  = twist_kernel_logmarginal(smc, ψtp1, t+1, p′)
+        ℓMψ = twist_kernel_logmarginal(smc, policy[t+1], t+1, p)
         @. ℓG + ℓMψ - ℓψ
     elseif t == T
         @. ℓG - ℓψ
@@ -130,6 +137,7 @@ function optimize_policy(sampler::CSMCUHA, states)
     for t in T:-1:1
         (; particles, logG) = states[t]
         d = length(proposal)
+        q = particles[1:d,:]
         p = particles[d+1:end,:]
 
         ptilde = if t == 1
@@ -137,28 +145,31 @@ function optimize_policy(sampler::CSMCUHA, states)
         else
             states[t].phalf
         end
+        z = vcat(q, ptilde)
 
         V = if t == T
             logG
         else
-            twist_prev     = policy_prev[t+1]
-            a_prev, b_prev = twist_prev.a, twist_prev.b
+            twist_prev                = policy_prev[t+1]
+            a_prev, b_prev            = twist_prev.a, twist_prev.b
+            a_recur, b_recur, c_recur = twist_recur.a, twist_recur.b, twist_recur.c
+
+            a_p_prev,  b_p_prev  = a_prev[d+1:end],  b_prev[d+1:end]
+            a_p_recur, b_p_recur = a_recur[d+1:end], b_recur[d+1:end]
 
             Σ         = (1 - h^2)*M
             Σii       = diag(Σ)
-            K         = Diagonal(@. 1/(2*a_prev + 1/Σii))
-            μ_twisted = K*(Σ\(h*p) .- b_prev)
+            K         = Diagonal(@. 1/(2*a_p_prev + 1/Σii))
+            μ_twisted = K*(Σ\(h*p) .- b_p_prev)
             σ_twisted = diag(K)
-            logM      = twist_mvnormal_logmarginal(twist_recur, μ_twisted, σ_twisted)
+            ψ_recur_p = (a=a_p_recur, b=b_p_recur, c=c_recur)
+            logM      = twist_mvnormal_logmarginal(ψ_recur_p, μ_twisted, σ_twisted)
             logG + logM
         end
 
-        Δa, Δb, Δc, rmse = fit_quadratic(ptilde, -V)
+        Δa, Δb, Δc, rmse = fit_quadratic(z, -V)
 
-        @info("", t, rmse = sum(
-            abs2,
-            twist_logdensity((a=Δa, b=Δb, c=Δc), ptilde) - V
-        ))
+        @info("", t, rmse)
 
         a_next = policy_prev[t].a + Δa
         b_next = policy_prev[t].b + Δb
@@ -185,8 +196,8 @@ function main()
 
     #δ0    = 5e-2
     #δT    = 5e-3
-    δ0         = δT = 0.1
-    h          = 0.5
+    δ0         = δT = 0.2
+    h          = 0.8
     M          = Eye(d)
     n_episodes = 2
 
@@ -209,6 +220,8 @@ function main()
             proposal,
             AnnealingPath(schedule)
         )
+        xs, _, stats_smc = sample(rng, smc, n_particles, 0.5, logtarget)
+
         csmc = CSMCUHA(
             M,
             δ0,
@@ -218,9 +231,6 @@ function main()
             proposal,
             AnnealingPath(schedule)
         )
-
-        xs, _, stats_smc = sample(rng, smc, n_particles, 0.5, logtarget)
-
         xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
         stats_csmc                  = stats_csmc_init
         for _ in 1:n_episodes
