@@ -44,11 +44,14 @@ function CSMCUHA(
     CSMCUHA{typeof(smc), typeof(policy)}(smc, policy)
 end
 
-function twist_kernel_logmarginal(smc::SMCUHA, twist, t, p)
+function twist_kernel_logmarginal(smc::SMCUHA, twist, t, x)
     (; proposal, h, M,) = smc
-    d   = length(proposal)
-    ψ_p = (a=twist.a[d+1:end], b=twist.b[d+1:end], c=twist.c)
-    twist_mvnormal_logmarginal(ψ_p, h*p, (1 - h^2)*diag(M))
+    d    = length(proposal)
+    q, p = x[1:d,:], x[d+1:end,:]
+    ψ_q  = (a=twist.a[1:d],     b=twist.b[1:d], c=0)
+    ψ_p  = (a=twist.a[d+1:end], b=twist.b[d+1:end], c=twist.c)
+    twist_logdensity(ψ_q, q) +
+        twist_mvnormal_logmarginal(ψ_p, h*p, (1 - h^2)*diag(M))
 end
 
 function rand_initial_with_potential(
@@ -62,19 +65,17 @@ function rand_initial_with_potential(
     
     ψ0 = first(policy)
     d  = length(proposal)
-
     μ  = mean(proposal)
     Σ  = cov(proposal)
 
     μ_qp = vcat(repeat(μ, 1, n_particles), zeros(d, n_particles))
     Σ_qp = vcat(diag(Σ), diag(M))
     x    = rand_twist_mvnormal(rng, ψ0, μ_qp, Σ_qp)
-    p    = x[d+1:end,:]
 
     ℓG0  = Zeros(n_particles)
     ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ_qp, Σ_qp)
     ℓψ0  = twist_logdensity(ψ0, x)
-    ℓMψ  = twist_kernel_logmarginal(smc, policy[2], 2, p)
+    ℓMψ  = twist_kernel_logmarginal(smc, policy[2], 2, x)
     ℓGψ  = @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
 
     x, ℓGψ
@@ -113,15 +114,15 @@ function mutate_with_potential(
     ℓF      = logpdf.(F, eachcol(phalf))
     ℓG      = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓB - ℓF
 
-    ℓψ   = twist_logdensity(ψ, x)
+    ℓψ   = twist_logdensity(ψ, vcat(q, phalf))
     T    = length(smc)
     ℓGψ  = if t < T
-        ℓMψ = twist_kernel_logmarginal(smc, policy[t+1], t+1, p)
+        ℓMψ = twist_kernel_logmarginal(smc, policy[t+1], t+1, x′)
         @. ℓG + ℓMψ - ℓψ
     elseif t == T
         @. ℓG - ℓψ
     end
-    x′, ℓGψ, (phalf=phalf,)
+    x′, ℓGψ, (q=q, phalf=phalf,)
 end
 
 function optimize_policy(sampler::CSMCUHA, states)
@@ -137,7 +138,11 @@ function optimize_policy(sampler::CSMCUHA, states)
     for t in T:-1:1
         (; particles, logG) = states[t]
         d = length(proposal)
-        q = particles[1:d,:]
+        q = if t == 1
+            particles[1:d,:]
+        else
+            states[t].q
+        end
         p = particles[d+1:end,:]
 
         ptilde = if t == 1
@@ -156,6 +161,7 @@ function optimize_policy(sampler::CSMCUHA, states)
 
             a_p_prev,  b_p_prev  = a_prev[d+1:end],  b_prev[d+1:end]
             a_p_recur, b_p_recur = a_recur[d+1:end], b_recur[d+1:end]
+            a_q_recur, b_q_recur = a_recur[1:d],     b_recur[1:d]
 
             Σ         = (1 - h^2)*M
             Σii       = diag(Σ)
@@ -163,7 +169,9 @@ function optimize_policy(sampler::CSMCUHA, states)
             μ_twisted = K*(Σ\(h*p) .- b_p_prev)
             σ_twisted = diag(K)
             ψ_recur_p = (a=a_p_recur, b=b_p_recur, c=c_recur)
-            logM      = twist_mvnormal_logmarginal(ψ_recur_p, μ_twisted, σ_twisted)
+            ψ_recur_q = (a=a_q_recur, b=b_q_recur, c=0)
+            logM      = twist_mvnormal_logmarginal(ψ_recur_p, μ_twisted, σ_twisted) +
+                twist_logdensity(ψ_recur_q, particles[1:d,:])
             logG + logM
         end
 
@@ -186,7 +194,7 @@ function main()
     rng  = Philox4x(UInt64, seed, 8)
     set_counter!(rng, 1)
 
-    d            = 2
+    d            = 5
     μ            = Fill(10, d)
     logtarget(x) = logpdf(MvNormal(μ, I), x)
 
@@ -196,10 +204,10 @@ function main()
 
     #δ0    = 5e-2
     #δT    = 5e-3
-    δ0         = δT = 0.2
-    h          = 0.8
+    δ0         = δT = 0.5
+    h          = 0.5
     M          = Eye(d)
-    n_episodes = 2
+    n_episodes = 3
 
     #qs = underdamped_langevin(rng, logtarget, h, δ0, randn(rng, d), M, 1000)
     #return Plots.plot(qs[1,:], qs[2,:], marker=:circle)
@@ -222,6 +230,8 @@ function main()
         )
         xs, _, stats_smc = sample(rng, smc, n_particles, 0.5, logtarget)
 
+        Plots.plot([stats.logZ for stats in stats_smc]) |> display
+
         csmc = CSMCUHA(
             M,
             δ0,
@@ -232,11 +242,14 @@ function main()
             AnnealingPath(schedule)
         )
         xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
+        Plots.plot!([stats.logZ for stats in stats_csmc_init]) |> display
         stats_csmc                  = stats_csmc_init
         for _ in 1:n_episodes
             csmc                   = optimize_policy(csmc, states)
             xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
+            Plots.plot!([stats.logZ for stats in stats_csmc]) |> display
         end
+        throw()
 
         (
             last(stats_smc).logZ,
