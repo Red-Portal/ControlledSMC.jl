@@ -128,7 +128,7 @@ function main()
     proposal     = MvNormal(μ0, Σ0)
 
     h  = 1.0
-    γ  = 5.
+    γ  = 1.
     σ2 = 2*γ
     M  = Eye(d)
 
@@ -147,7 +147,8 @@ function main()
         AnnealingPath(schedule)
     )
 
-    particles = [32, 64, 128, 256,]# 512, 1024]
+    particles = [512]
+        #[32, 64, 128, 256,]# 512, 1024]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:4) do _
             xs, _, stats    = sample(rng, sampler, n_particles, 0.5, logtarget)
