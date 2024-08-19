@@ -93,7 +93,7 @@ function mutate_with_potential(
     μ_bwd = klmc_fwd(logπtm1, x′, -v′, h, γ)
 
     ℓF = map(i -> logpdf(MvNormal(μ_fwd[:,i], Σ_fwd), z′[:,i]), 1:n) 
-    ℓB = map(i -> logpdf(MvNormal(μ_bwd[:,i], Σ_bwd), z[:,i]), 1:n)
+    ℓB = map(i -> logpdf(MvNormal(μ_bwd[:,i], Σ_fwd), z[:,i]), 1:n)
     ℓG = ℓπt - ℓπtm1 + ℓB - ℓF + ℓauxt - ℓauxtm1 
     z′, ℓG, NamedTuple()
 end
@@ -141,7 +141,7 @@ function main()
     proposal     = MvNormal(μ0, Σ0)
 
     h  = 8.0
-    γ  = 10.0
+    γ  = 12.0
     σ2 = 2*γ
     M  = Eye(d)
 

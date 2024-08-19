@@ -38,25 +38,32 @@ function CSMCKLMC(
     proposal::MvNormal,
     path    ::AnnealingPath,
 ) where {F<:Real}
-    d      = size(M, 1)
+    d      = length(proposal)
     policy = [(a=zeros(F, 2*d), b=zeros(F, 2*d), c=zero(F)) for _ in 1:length(path)]
     smc    = SMCKLMC(h, gamma, sigma2, backward, proposal, path)
     CSMCKLMC{typeof(smc), typeof(policy)}(smc, policy)
 end
 
-function twist_kernel_logmarginal(smc::SMCKLMC, twist, t, z)
-    (; proposal, h, M,) = smc
-    d    = length(proposal)
+function twist_kernel_logmarginal(smc::SMCKLMC, twist, t, logtarget, z)
+    (; path, proposal, h, Σ_fwd, γ) = smc
+    d = length(proposal)
+
+    logπt(x_) = annealed_logtarget(path, t, x_, proposal, logtarget)
+
+    x, v  = z[1:d,:], z[d+1:end,:]
+    μ_fwd = klmc_fwd(logπt, x, v, h, γ)
+
+    twist_mvnormal_logmarginal(twist, μ_fwd, Σ_fwd)
 end
 
 function rand_initial_with_potential(
     rng        ::Random.AbstractRNG,
     sampler    ::CSMCKLMC,
-               ::Any,
+    logtarget ,
     n_particles::Int,
 )
     (; smc, policy) = sampler
-    (; proposal, M) = smc
+    (; proposal, ) = smc
     
     ψ0 = first(policy)
     d  = length(proposal)
@@ -64,13 +71,13 @@ function rand_initial_with_potential(
     Σ  = cov(proposal)
 
     μ_z = vcat(repeat(μ, 1, n_particles), zeros(d, n_particles))
-    Σ_z = vcat(diag(Σ), diag(M))
+    Σ_z = vcat(diag(Σ), ones(d))
     z   = rand_twist_mvnormal(rng, ψ0, μ_z, Σ_z)
 
     ℓG0  = Zeros(n_particles)
     ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ_z, Σ_z)
     ℓψ0  = twist_logdensity(ψ0, z)
-    ℓMψ  = twist_kernel_logmarginal(smc, policy[2], 2, z)
+    ℓMψ  = twist_kernel_logmarginal(smc, policy[2], 2, logtarget, z)
     ℓGψ  = @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
 
     z, ℓGψ
@@ -78,13 +85,13 @@ end
 
 function mutate_with_potential(
     rng       ::Random.AbstractRNG,
-    sampler   ::CSMCUHA,
+    sampler   ::CSMCKLMC,
     t         ::Int,
     z         ::AbstractMatrix,
     logtarget,
 )
     (; policy, smc) = sampler
-    (; path, h, γ, Σ, proposal) = smc
+    (; path, h, γ, Σ_fwd, proposal) = smc
     logπt(x_)   = annealed_logtarget(path, t,   x_, proposal, logtarget)
     logπtm1(x_) = annealed_logtarget(path, t-1, x_, proposal, logtarget)
     d           = length(proposal)
@@ -94,38 +101,35 @@ function mutate_with_potential(
     ψ      = policy[t]
     x, v   = z[1:d,:], z[d+1:end,:]
 
-    ϵ     = rand(rng, MvNormal(Zeros(2*d), Σ), n)
     μ_fwd = klmc_fwd(logπt, x, v, h, γ)
+    z′     = rand_twist_mvnormal(rng, ψ, μ_fwd, Σ_fwd)
+    x′, v′ = z′[1:d,:], z′[d+1:end,:]
 
+    ℓπt     = logπt.(eachcol(x′)) 
+    ℓπtm1   = logπtm1.(eachcol(x)) 
+    ℓauxt   = logpdf.(Ref(v_dist), eachcol(v′))
+    ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(v))
 
-    ψ_p   = (a=ψ.a[d+1:end], b=ψ.b[d+1:end], c=ψ.c)
-    q′, p′ = leapfrog(logπt, q, phalf, δt, M)
-    x′     = vcat(q′, p′)
+    μ_bwd = klmc_fwd(logπtm1, x′, -v′, h, γ)
 
-    ℓπt     = logπt.(eachcol(q′)) 
-    ℓπtm1   = logπtm1.(eachcol(q)) 
-    ℓauxt   = logpdf.(Ref(p_dist), eachcol(p′))
-    ℓauxtm1 = logpdf.(Ref(p_dist), eachcol(p))
-    B       = MvNormal.(h*eachcol(phalf), Ref((1 - h^2)*M))
-    F       = MvNormal.(h*eachcol(p),     Ref((1 - h^2)*M))
-    ℓB      = logpdf.(B, eachcol(p))
-    ℓF      = logpdf.(F, eachcol(phalf))
-    ℓG      = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓB - ℓF
+    ℓF = map(i -> logpdf(MvNormal(μ_fwd[:,i], Σ_fwd), z′[:,i]), 1:n) 
+    ℓB = map(i -> logpdf(MvNormal(μ_bwd[:,i], Σ_fwd), z[:,i]), 1:n)
+    ℓG = ℓπt - ℓπtm1 + ℓB - ℓF + ℓauxt - ℓauxtm1 
 
-    ℓψ   = twist_logdensity(ψ, vcat(q, phalf))
+    ℓψ   = twist_logdensity(ψ, z′)
     T    = length(smc)
     ℓGψ  = if t < T
-        ℓMψ = twist_kernel_logmarginal(smc, policy[t+1], t+1, x′)
+        ℓMψ = twist_kernel_logmarginal(smc, policy[t+1], t+1, logtarget, z′)
         @. ℓG + ℓMψ - ℓψ
     elseif t == T
         @. ℓG - ℓψ
     end
-    x′, ℓGψ, (q=q, phalf=phalf,)
+    z′, ℓGψ, (μ_fwd=μ_fwd,)
 end
 
-function optimize_policy(sampler::CSMCUHA, states)
+function optimize_policy(sampler::CSMCKLMC, states)
     smc = sampler.smc
-    (; h, M, proposal) = smc
+    (; proposal, Σ_fwd) = smc
 
     policy_prev = sampler.policy
     proposal    = sampler.smc.proposal
@@ -135,45 +139,22 @@ function optimize_policy(sampler::CSMCUHA, states)
     twist_recur = last(policy_prev)
     for t in T:-1:1
         (; particles, logG) = states[t]
-        d = length(proposal)
-        q = if t == 1
-            particles[1:d,:]
-        else
-            states[t].q
-        end
-        p = particles[d+1:end,:]
-
-        ptilde = if t == 1
-            p
-        else
-            states[t].phalf
-        end
-        z = vcat(q, ptilde)
 
         V = if t == T
             logG
         else
-            twist_prev                = policy_prev[t+1]
-            a_prev, b_prev            = twist_prev.a, twist_prev.b
-            a_recur, b_recur, c_recur = twist_recur.a, twist_recur.b, twist_recur.c
+            twist_prev      = policy_prev[t+1]
+            a_prev, b_prev  = twist_prev.a, twist_prev.b
 
-            a_p_prev,  b_p_prev  = a_prev[d+1:end],  b_prev[d+1:end]
-            a_p_recur, b_p_recur = a_recur[d+1:end], b_recur[d+1:end]
-            a_q_recur, b_q_recur = a_recur[1:d],     b_recur[1:d]
-
-            Σ         = (1 - h^2)*M
-            Σii       = diag(Σ)
-            K         = Diagonal(@. 1/(2*a_p_prev + 1/Σii))
-            μ_twisted = K*(Σ\(h*p) .- b_p_prev)
-            σ_twisted = diag(K)
-            ψ_recur_p = (a=a_p_recur, b=b_p_recur, c=c_recur)
-            ψ_recur_q = (a=a_q_recur, b=b_q_recur, c=0)
-            logM      = twist_mvnormal_logmarginal(ψ_recur_p, μ_twisted, σ_twisted) +
-                twist_logdensity(ψ_recur_q, particles[1:d,:])
+            μ_fwd_tp1 = states[t+1].μ_fwd
+            K         = inv(Diagonal(2*a_prev) + inv(PDMats.PDMat(Σ_fwd)))
+            μ_twisted = K*(Σ_fwd\μ_fwd_tp1 .- b_prev)
+            Σ_twisted = K
+            logM      = twist_mvnormal_logmarginal(twist_recur, μ_twisted, Σ_twisted) 
             logG + logM
         end
 
-        Δa, Δb, Δc, rmse = fit_quadratic(z, -V)
+        Δa, Δb, Δc, rmse = fit_quadratic(particles, -V)
 
         @info("", t, rmse)
 
@@ -200,12 +181,12 @@ function main()
     Σ0           = Eye(d)
     proposal     = MvNormal(μ0, Σ0)
 
-    #δ0    = 5e-2
-    #δT    = 5e-3
-    δ0         = δT = 0.5
-    h          = 0.5
-    M          = Eye(d)
-    n_episodes = 3
+    h  = 8.0
+    γ  = 5.0
+    σ2 = 2*γ
+    M  = Eye(d)
+
+    n_episodes = 2 #3
 
     #qs = underdamped_langevin(rng, logtarget, h, δ0, randn(rng, d), M, 1000)
     #return Plots.plot(qs[1,:], qs[2,:], marker=:circle)
@@ -217,37 +198,32 @@ function main()
 
     n_particles = 256
     res = @showprogress map(1:8) do _
-        smc = SMCUHA(
-            M,
-            δ0,
-            δT,
-            h,
+
+        smc = SMCKLMC(
+            h, γ, σ2,
             ForwardKernel(),
             proposal,
             AnnealingPath(schedule)
         )
+
         xs, _, stats_smc = sample(rng, smc, n_particles, 0.5, logtarget)
 
-        Plots.plot([stats.logZ for stats in stats_smc]) |> display
-
-        csmc = CSMCUHA(
-            M,
-            δ0,
-            δT,
-            h,
+        csmc = CSMCKLMC(
+            h, γ, σ2,
             ForwardKernel(),
             proposal,
             AnnealingPath(schedule)
         )
         xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
-        Plots.plot!([stats.logZ for stats in stats_csmc_init]) |> display
+        #Plots.plot!([stats.logZ for stats in stats_csmc_init]) |> display
+
         stats_csmc                  = stats_csmc_init
         for _ in 1:n_episodes
             csmc                   = optimize_policy(csmc, states)
             xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
-            Plots.plot!([stats.logZ for stats in stats_csmc]) |> display
+            #Plots.plot!([stats.logZ for stats in stats_csmc]) |> display
         end
-        throw()
+        #throw()
 
         (
             last(stats_smc).logZ,
@@ -267,49 +243,4 @@ function main()
     logZ = [last(r) for r in res]
     violin!( fill(3, length(logZ)), logZ, fillcolor=:red, alpha=0.2, label="CSMC N=$(n_particles) J=$(n_episodes)") |> display
     dotplot!(fill(3, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
-end
-
-function visualize()
-    seed = (0x38bef07cf9cc549d, 0x49e2430080b3f797)
-    rng  = Philox4x(UInt64, seed, 8)
-    set_counter!(rng, 1)
-
-    d            = 10
-    μ            = Fill(5, d)
-    logtarget(x) = logpdf(MvNormal(μ, I), x)
-    n_episodes   = 10
-    
-    μ0           = Zeros(d)
-    Σ0           = Eye(d)
-    proposal     = MvNormal(μ0, Σ0)
-
-    δ0         = δT = 0.1
-    h          = 0.5
-    M          = Eye(d)
-    n_episodes = 5
-    n_iters    = 32
-    schedule   = range(0, 1; length=n_iters)
-
-    csmc = CSMCUHA(
-        M,
-        δ0,
-        δT,
-        h,
-        ForwardKernel(),
-        proposal,
-        AnnealingPath(schedule)
-    )
-
-    Plots.plot() |> display
-
-    n_particles = 256
-    xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
-    stats_csmc                  = stats_csmc_init
-    for _ in 1:n_episodes
-        csmc                   = optimize_policy(csmc, states)
-        xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
-
-        bs = [twist.b[[1,2]] for twist in csmc.policy]
-        Plots.plot!([b[1] for b in bs], [b[2] for b in bs]) |> display
-    end
 end
