@@ -181,23 +181,23 @@ function main()
     Σ0           = Eye(d)
     proposal     = MvNormal(μ0, Σ0)
 
-    h  = 8.0
-    γ  = 5.0
+    h  = 5.0 #8.0
+    γ  = 50.0 #5.0
     σ2 = 2*γ
     M  = Eye(d)
 
-    n_episodes = 2 #3
+    n_episodes = 3
 
     #qs = underdamped_langevin(rng, logtarget, h, δ0, randn(rng, d), M, 1000)
     #return Plots.plot(qs[1,:], qs[2,:], marker=:circle)
 
-    n_iters  = 32
+    n_iters  = 16
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
 
     n_particles = 256
-    res = @showprogress map(1:8) do _
+    res = @showprogress map(1:32) do _
 
         smc = SMCKLMC(
             h, γ, σ2,
