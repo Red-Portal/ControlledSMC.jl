@@ -18,6 +18,17 @@ Pkg.update()
 * `csmc_ula.jl`: Controlled SMC with an ULA kernel implementation.
 * `csmc_klmc.jl`: Controlled SMC with a KLMC kernel implementation.
 
+All that each implementation of SMC are doing is defining the following methods:
+```julia
+rand_initial_with_potential(rng, sampler, n_particles)
+
+mutate_with_potential(rng, sampler, timestep, particles, logtarget)
+```
+The type of `sampler` dispatches the implementation corresponding to each SMC implementation.
+See `sample.jl` first to see how these methods are used. 
+`rand_initial_with_potential` has a default implementation which is automatically used if it is not specialized.
+
+
 ## Examples
 ### Controlled SMC-ULA
 
