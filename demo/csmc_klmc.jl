@@ -158,6 +158,10 @@ function optimize_policy(sampler::CSMCKLMC, states)
 
         @info("", t, rmse)
 
+        if rmse > 1e+5
+            error("ADP procedure diverged.")
+        end
+
         a_next = policy_prev[t].a + Δa
         b_next = policy_prev[t].b + Δb
         c_next = policy_prev[t].c + Δc
@@ -173,7 +177,7 @@ function main()
     rng  = Philox4x(UInt64, seed, 8)
     set_counter!(rng, 1)
 
-    d            = 5
+    d            = 20
     μ            = Fill(10, d)
     logtarget(x) = logpdf(MvNormal(μ, I), x)
 
@@ -181,23 +185,23 @@ function main()
     Σ0           = Eye(d)
     proposal     = MvNormal(μ0, Σ0)
 
-    h  = 5.0 #8.0
-    γ  = 50.0 #5.0
+    h  = 20.0 #8.0
+    γ  = 200.0 #5.0
     σ2 = 2*γ
     M  = Eye(d)
 
-    n_episodes = 3
+    n_episodes = 5
 
     #qs = underdamped_langevin(rng, logtarget, h, δ0, randn(rng, d), M, 1000)
     #return Plots.plot(qs[1,:], qs[2,:], marker=:circle)
 
-    n_iters  = 16
+    n_iters  = 32
     schedule = range(0, 1; length=n_iters)
 
     hline([0.0], label="True logZ") |> display
 
     n_particles = 256
-    res = @showprogress map(1:32) do _
+    res = @showprogress map(1:8) do _
 
         smc = SMCKLMC(
             h, γ, σ2,

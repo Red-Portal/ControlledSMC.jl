@@ -1,5 +1,6 @@
 
 using Accessors
+using Base.Iterators
 using Distributions
 using FillArrays
 using ForwardDiff
@@ -151,11 +152,11 @@ function main()
     rng  = Philox4x(UInt64, seed, 8)
     set_counter!(rng, 1)
 
-    d            = 20
-    μ            = Fill(2, d)
-    Σ            = fill(0.1, d, d) + I
+    d            = 10
+    μ            = Fill(10, d)
+    Σ            = I
     logtarget(x) = logpdf(MvNormal(μ, Σ), x)
-    n_episodes   = 3
+    n_episodes   = 5
     
     μ0           = Zeros(d)
     Σ0           = Eye(d)
@@ -214,10 +215,10 @@ function visualize()
     rng  = Philox4x(UInt64, seed, 8)
     set_counter!(rng, 1)
 
-    d            = 10
-    μ            = Fill(5, d)
+    d            = 2
+    μ            = Fill(10, d)
     logtarget(x) = logpdf(MvNormal(μ, I), x)
-    n_episodes   = 10
+    n_episodes   = 3
     
     μ0           = Zeros(d)
     Σ0           = Eye(d)
@@ -225,7 +226,7 @@ function visualize()
 
     #h0    = 5e-2
     #hT    = 5e-3
-    h0    = hT = 0.2
+    h0    = hT = 0.1
     Γ     = Diagonal(ones(d))
     n_iters  = 32
     schedule = range(0, 1; length=n_iters)
@@ -239,11 +240,18 @@ function visualize()
     n_particles = 256
     xs, states, stats_csmc_init = sample(rng, csmc, n_particles, 0.5, logtarget)
     stats_csmc                  = stats_csmc_init
-    for _ in 1:n_episodes
+    for (j, c)  in zip(1:3, [:Blues, :YlGn, :OrRd])
         csmc                   = optimize_policy(csmc, states)
         xs, states, stats_csmc = sample(rng, csmc, n_particles, 0.5, logtarget)
 
         bs = [twist.b[[1,2]] for twist in csmc.policy]
-        Plots.plot!([b[1] for b in bs], [b[2] for b in bs]) |> display
+        Plots.plot!(
+            [b[1] for b in bs],
+            [b[2] for b in bs],
+            linez=length(bs):-1:1,
+            c     = c,
+            #mark  = :circ,
+            label = "episode $(j)"
+        ) |> display
     end
 end
