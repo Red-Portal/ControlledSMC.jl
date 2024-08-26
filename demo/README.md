@@ -10,7 +10,7 @@ Pkg.update()
 
 ## Project Structure
 * `sample.jl`: The generic sampling routines.
-* `commonl.jl`: Commonly shared utilities.
+* `common.jl`: Commonly shared utilities.
 * `twist.jl`: Twisting-specific routines.
 
 * `smc_ula.jl`: SMC with an ULA kernel implementation.
@@ -39,7 +39,7 @@ main()
 
 ![csmcula](https://github.com/Red-Portal/ControlledAIS/blob/main/demo/figures/csmc_ula.png)
 
- SMC-ULA
+ ### Controlled SMC-KLMC
 
 ```julia
 include("csmc_klmc.jl")
