@@ -1,16 +1,16 @@
 
-using Statistics
 using Distributions
-using Random
+using FillArrays
 using ForwardDiff
-using LogExpFunctions
 using LinearAlgebra
+using LogExpFunctions
+using PDMats
 using Plots, StatsPlots
 using ProgressMeter
-using PDMats
-using SimpleUnPack
-using FillArrays
+using Random
 using Random123
+using SimpleUnPack
+using Statistics
 
 include("common.jl")
 include("mcmc.jl")
@@ -143,6 +143,7 @@ function main()
 
     #h0    = 5e-2
     #hT    = 5e-3
+
     h0    = hT = 1.0
 
     Γ     = Eye(d)
@@ -152,6 +153,10 @@ function main()
 
     hline([0.0], label="True logZ") |> display
 
+    #
+    # SMC-ULA with reverse kernel set as:
+    #     L_{t-1}(x_{t-1}, x_t) = K_{t-1}(x_{t-1}, x_t)
+    #
     sampler = SMCULA(
         Γ,
         h0,
@@ -170,10 +175,14 @@ function main()
 
         logZ = [last(r) for r in res]
 
-        violin!( fill(3*idx-2, length(logZ)), logZ, fillcolor  =:blue, alpha=0.2, label="N=$(n_particles)") |> display
+        violin!( fill(3*idx-2, length(logZ)), logZ, fillcolor  =:blue, alpha=0.2, label=" N=$(n_particles)") |> display
         dotplot!(fill(3*idx-2, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
     end
 
+    #
+    # SMC-ULA with reverse kernel set as:
+    #     L_{t-1}(x_{t-1}, x_t) = K_t(x_{t-1}, x_t)
+    #
     sampler = SMCULA(
         Γ,
         h0,
@@ -196,6 +205,10 @@ function main()
         dotplot!(fill(3*idx-1, length(logZ)), logZ, markercolor=:green, label=nothing) |> display
     end
 
+    #
+    # SMC-ULA with reverse kernel set as:
+    #     L_{t-1}(x_{t-1}, x_t) = \pi_{t}(x_{t}) K_t(x_t, x_{t-1}) / \pi_{t-1}(x_{t-1})
+    #
     sampler = SMCULA(
         Γ,
         h0,
