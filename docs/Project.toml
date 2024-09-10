@@ -1,0 +1,3 @@
+[deps]
+ControlledSMC = "af2ad9dd-f33b-4db6-b90a-e0a5ad30adf0"
+Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
