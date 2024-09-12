@@ -46,7 +46,6 @@ end
 
 function reweigh(
     ℓw::AbstractVector,
-    t,
     ℓG::AbstractVector,
     ℓZ::Real
 )

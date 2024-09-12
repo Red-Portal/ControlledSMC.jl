@@ -33,7 +33,7 @@ function sample(
     ℓZ    = zero(eltype(x))
     ℓw    = fill(-log(convert(eltype(x), n_particles)), n_particles)
 
-    ℓw, ℓZ, ess = reweigh(ℓw, 1, ℓG, ℓZ)
+    ℓw, ℓZ, ess = reweigh(ℓw, ℓG, ℓZ)
     x, ℓw, ancestors, resampled = resample(rng, x, ℓw, ess, threshold)
 
     states[1] = (particles=x, ancestors=ancestors, log_potential=ℓG[ancestors])
@@ -41,7 +41,7 @@ function sample(
 
     for t in 2:n_iters
         x, ℓG, aux                  = mutate_with_potential(rng, sampler, path, t, x)
-        ℓw, ℓZ, ess                 = reweigh(ℓw, t, ℓG, ℓZ)
+        ℓw, ℓZ, ess                 = reweigh(ℓw, ℓG, ℓZ)
         x, ℓw, ancestors, resampled = resample(rng, x, ℓw, ess, threshold)
 
         states[t] = merge((particles=x, log_potential=ℓG[ancestors]), aux)
