@@ -18,8 +18,7 @@ function sample(
     rng          ::Random.AbstractRNG,
     sampler      ::AbstractSMC,
     path         ::AbstractPath,
-    n_particles  ::Int,
-    threshold    ::Real;
+    n_particles  ::Int;
     show_progress::Bool = true,
 )
     n_iters = length(path)
@@ -34,20 +33,32 @@ function sample(
     ℓw    = fill(-log(convert(eltype(x), n_particles)), n_particles)
 
     ℓw, ℓZ, ess = reweigh(ℓw, ℓG, ℓZ)
-    x, ℓw, ancestors, resampled = resample(rng, x, ℓw, ess, threshold)
+    x, ℓw, ancestors, resampled = resample(rng, x, ℓw)
 
     states[1] = (particles=x, ancestors=ancestors, log_potential=ℓG[ancestors])
     info[1]   = (iteration=1, ess=n_particles, log_normalizer=ℓZ)
 
+    target_prev = step(path, 1, x, ℓw)
     for t in 2:n_iters
-        x, ℓG, aux                  = mutate_with_potential(rng, sampler, path, t, x)
+        target                      = step(path, t, x, ℓw)
+        x, ℓG, aux                  = mutate_with_potential(rng, sampler, t, target, target_prev, x)
         ℓw, ℓZ, ess                 = reweigh(ℓw, ℓG, ℓZ)
-        x, ℓw, ancestors, resampled = resample(rng, x, ℓw, ess, threshold)
+        x, ℓw, ancestors, resampled = resample(rng, x, ℓw)
 
         states[t] = merge((particles=x, log_potential=ℓG[ancestors]), aux)
         info[t]   = (iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled)
 
         pm_next!(prog, info[t])
+        target_prev = target
     end
     x, states, info
+end
+
+function sample(
+    sampler      ::AbstractSMC,
+    path         ::AbstractPath,
+    n_particles  ::Int;
+    show_progress::Bool = true,
+)
+    sample(Random.default_rng(), sampler, path, n_particles; show_progress)
 end

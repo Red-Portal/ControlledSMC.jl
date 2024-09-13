@@ -22,10 +22,16 @@ abstract type AbstractBackwardKernel end
 include("weighing.jl")
 include("mcmc.jl")
 
-include("annealing.jl")
+# Target Paths
+include("paths/annealing.jl")
 
-export GeometricAnnealing
+include("paths/geometric_annealing.jl")
+export GeometricAnnealingPath
 
+include("paths/adaptive_geometric_annealing.jl")
+export  AdaptiveGeometricAnnealing
+
+# Backward Kernels
 include("backwardkernel.jl")
 
 export
@@ -37,7 +43,7 @@ include("sample.jl")
 
 export sample
 
-include("smc_ula.jl")
+include("samplers/smc_ula.jl")
 
 export SMCULA
 

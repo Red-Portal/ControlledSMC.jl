@@ -25,23 +25,21 @@ function resample(
     rng      ::Random.AbstractRNG,
     x        ::AbstractMatrix,
     ℓw       ::AbstractVector,
-    ess      ::Real,
-    threshold::Real,
 )
     n_particles = size(x, 1)
     # Marginal likelihood update rule currently seems biased for
     # adaptive resampling.
-    if true #ess < n_particles*threshold
+    #if #ess < n_particles*threshold
         idx       = systematic_sampling(rng, exp.(ℓw))
         resampled = true
         x         = x[:,idx]
         ℓw[:]    .= -log(n_particles)
         x, ℓw, idx, resampled
-    else
-        resampled = false
-        ancestor  = collect(1:n_particles)
-        x, ℓw, ancestor, resampled
-    end
+    #else
+    #    resampled = false
+    #    ancestor  = collect(1:n_particles)
+    #    x, ℓw, ancestor, resampled
+    #end
 end
 
 function reweigh(
