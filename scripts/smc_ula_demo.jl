@@ -16,13 +16,13 @@ struct Dist{D}
 end
 
 function LogDensityProblems.capabilities(::Type{<:Dist})
-    LogDensityProblems.LogDensityOrder{0}()
+    return LogDensityProblems.LogDensityOrder{0}()
 end
 
 LogDensityProblems.dimension(prob::Dist) = length(prob.dist)
 
 function LogDensityProblems.logdensity(prob::Dist, x)
-    logpdf(prob.dist, x)
+    return logpdf(prob.dist, x)
 end
 
 function main()
@@ -34,20 +34,20 @@ function main()
     μ       = Fill(10, d)
     prob    = Dist(MvNormal(μ, I))
     prob_ad = ADgradient(AutoReverseDiff(), prob)
-    
+
     n_iters  = 32
     proposal = MvNormal(Zeros(d), I)
     schedule = range(0, 1; length=n_iters)
     path     = GeometricAnnealingPath(schedule, proposal, prob_ad)
 
-    h0  = 0.5
-    hT  = 0.5
-    Γ   = Eye(d)
+    h0 = 0.5
+    hT = 0.5
+    Γ  = Eye(d)
 
-    hline([0.0], label="True logZ") |> display
+    display(hline([0.0]; label="True logZ"))
 
-    #sampler = SMCULA(Γ, h0, hT, TimeCorrectForwardKernel())
-    #xs, _, stats = ControlledSMC.sample(rng, sampler, path, 256, 0.5; show_progress=true)
+    #sampler = SMCULA(h0, hT, TimeCorrectForwardKernel(), Γ, path)
+    #xs, _, stats = ControlledSMC.sample(rng, sampler, path, 1024, 1.0; show_progress=true)
     #return
 
     #
@@ -58,14 +58,24 @@ function main()
     particles = [32, 64, 128]#, 256, 512]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
-            xs, _, stats = ControlledSMC.sample(rng, sampler, path, n_particles, 0.5; show_progress=false)
-            (mean(xs, dims=2)[:,1], last(stats).log_normalizer)
+            xs, _, _, stats = ControlledSMC.sample(
+                rng, sampler, path, n_particles, 0.5; show_progress=false
+            )
+            (mean(xs; dims=2)[:, 1], last(stats).log_normalizer)
         end
 
         logZ = [last(r) for r in res]
 
-        violin!( fill(3*idx-2, length(logZ)), logZ, fillcolor  =:blue, alpha=0.2, label=" N=$(n_particles)") |> display
-        dotplot!(fill(3*idx-2, length(logZ)), logZ, markercolor=:blue, label=nothing) |> display
+        display(violin!(
+            fill(3 * idx - 2, length(logZ)),
+            logZ;
+            fillcolor=:blue,
+            alpha=0.2,
+            label=" N=$(n_particles)",
+        ))
+        display(dotplot!(
+            fill(3 * idx - 2, length(logZ)), logZ; markercolor=:blue, label=nothing
+        ))
     end
 
     #
@@ -76,14 +86,24 @@ function main()
     particles = [32, 64, 128]#, 256, 512]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
-            xs, _, stats = ControlledSMC.sample(rng, sampler, path, n_particles, 0.5; show_progress=false)
-            (mean(xs, dims=2)[:,1], last(stats).log_normalizer)
+            xs, _, _, stats = ControlledSMC.sample(
+                rng, sampler, path, n_particles, 0.5; show_progress=false
+            )
+            (mean(xs; dims=2)[:, 1], last(stats).log_normalizer)
         end
 
         logZ = [last(r) for r in res]
 
-        violin!( fill(3*idx-1, length(logZ)), logZ, fillcolor  =:green, alpha=0.2, label="N=$(n_particles)") |> display
-        dotplot!(fill(3*idx-1, length(logZ)), logZ, markercolor=:green, label=nothing) |> display
+        display(violin!(
+            fill(3 * idx - 1, length(logZ)),
+            logZ;
+            fillcolor=:green,
+            alpha=0.2,
+            label="N=$(n_particles)",
+        ))
+        display(dotplot!(
+            fill(3 * idx - 1, length(logZ)), logZ; markercolor=:green, label=nothing
+        ))
     end
 
     #
@@ -93,11 +113,21 @@ function main()
     sampler = SMCULA(h0, hT, DetailedBalance(), Γ, path)
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
-            xs, _, stats = ControlledSMC.sample(rng, sampler, path, n_particles, 0.5; show_progress=false)
-            (mean(xs, dims=2)[:,1], last(stats).log_normalizer)
+            xs, _, _, stats = ControlledSMC.sample(
+                rng, sampler, path, n_particles, 0.5; show_progress=false
+            )
+            (mean(xs; dims=2)[:, 1], last(stats).log_normalizer)
         end
         logZ = [last(r) for r in res]
-        violin!( fill(3*idx, length(logZ)), logZ, fillcolor  =:red, alpha=0.2, label="N=$(n_particles)") |> display
-        dotplot!(fill(3*idx, length(logZ)), logZ, markercolor=:red, label=nothing) |> display
+        display(violin!(
+            fill(3 * idx, length(logZ)),
+            logZ;
+            fillcolor=:red,
+            alpha=0.2,
+            label="N=$(n_particles)",
+        ))
+        display(dotplot!(
+            fill(3 * idx, length(logZ)), logZ; markercolor=:red, label=nothing
+        ))
     end
 end

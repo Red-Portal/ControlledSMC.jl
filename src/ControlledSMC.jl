@@ -29,15 +29,12 @@ include("paths/geometric_annealing.jl")
 export GeometricAnnealingPath
 
 include("paths/adaptive_geometric_annealing.jl")
-export  AdaptiveGeometricAnnealing
+export AdaptiveGeometricAnnealing
 
 # Backward Kernels
 include("backwardkernel.jl")
 
-export
-    DetailedBalance,
-    ForwardKernel,
-    TimeCorrectForwardKernel
+export DetailedBalance, ForwardKernel, TimeCorrectForwardKernel
 
 include("sample.jl")
 
