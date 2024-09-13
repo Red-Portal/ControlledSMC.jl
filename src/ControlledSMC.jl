@@ -41,7 +41,9 @@ include("sample.jl")
 export sample
 
 include("samplers/smc_ula.jl")
-
 export SMCULA
+
+include("samplers/smc_uhmc.jl")
+export SMCUHMC
 
 end
