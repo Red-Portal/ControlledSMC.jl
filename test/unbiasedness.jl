@@ -24,6 +24,7 @@
         ),
         ("SMCULA + ForwardKernel", SMCULA(0.5, 0.5, ForwardKernel(), Eye(d), path)),
         ("SMCUHMC", SMCUHMC(1.0, 0.5, Eye(d))),
+        ("SMCKLMC", SMCKLMC(5.0, 5.0)),
     ]
         ℓZ  = map(1:n_test_samples) do _
             xs, _, _, stats = ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)

@@ -21,6 +21,7 @@
         ("SMCULA + ForwardKernel", SMCULA(0.5, 0.5, ForwardKernel(), Eye(d), path)),
         ("SMCULA + DetailedBalance", SMCULA(0.5, 0.5, DetailedBalance(), Eye(d), path)),
         ("SMCUHMC", SMCUHMC(1.0, 0.5, Eye(d))),
+        ("SMCKLMC", SMCKLMC(5.0, 5.0)),
     ]
         ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
     end
@@ -51,6 +52,7 @@ end
         ("SMCULA + ForwardKernel", SMCULA(1e-4, 1e-4, ForwardKernel(), Eye(d), path)),
         ("SMCULA + DetailedBalance", SMCULA(1e-4, 1e-4, DetailedBalance(), Eye(d), path)),
         ("SMCUHMC", SMCUHMC(1.0, 0.5, Eye(d))),
+        ("SMCKLMC", SMCKLMC(5.0, 5.0)),
     ]
         ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
     end
