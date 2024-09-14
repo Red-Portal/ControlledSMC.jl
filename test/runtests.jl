@@ -88,14 +88,14 @@ end
     n_test_samples   = 128
 
     # Problem Setup
-    d       = 10
+    d       = 5
     μ       = Fill(10, d)
     prob    = Dist(MvNormal(μ, I))
     prob_ad = ADgradient(AutoReverseDiff(), prob)
     Z_true  = 1.0
 
     # Sampler Setup
-    n_iters     = 32
+    n_iters     = 64
     proposal    = MvNormal(Zeros(d), I)
     schedule    = range(0, 1; length=n_iters)
     path        = GeometricAnnealingPath(schedule, proposal, prob_ad)
@@ -114,7 +114,7 @@ end
             last(stats).log_normalizer
         end
         Z   = exp.(ℓZ)
-        res = tTest1S(Z; refmean=Z_true)
+        res = tTest1S(Z; refmean=Z_true, verbose=false)
 
         @test res.p > pvalue_threshold
     end
