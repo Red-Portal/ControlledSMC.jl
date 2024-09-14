@@ -23,7 +23,7 @@ function logdensity(prob::AnnealedDensityProblem, x)
     return anneal(annealing, ℓπ0, ℓπT)
 end
 
-function logdensity_batch(prob::AnnealedDensityProblem, xs::AbstractMatrix)
+function logdensity(prob::AnnealedDensityProblem, xs::AbstractMatrix)
     return logdensity.(Ref(prob), eachcol(xs))
 end
 
@@ -41,11 +41,11 @@ function logdensity_gradient(prob::AnnealedDensityProblem, x::AbstractVector)
     return ∇ℓπt
 end
 
-function logdensity_gradient_batch(prob::AnnealedDensityProblem, xs::AbstractMatrix)
+function logdensity_gradient(prob::AnnealedDensityProblem, xs::AbstractMatrix)
     return mapslices(xi -> logdensity_gradient(prob, Vector(xi)), xs; dims=1)
 end
 
-function logdensity_and_gradient_batch(prob::AnnealedDensityProblem, xs::AbstractMatrix)
+function logdensity_and_gradient(prob::AnnealedDensityProblem, xs::AbstractMatrix)
     res = logdensity_and_gradient.(Ref(prob), xs)
     return first.(res), last.(res)
 end

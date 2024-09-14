@@ -38,13 +38,13 @@
         Σ_true[(d + 1):end, (d + 1):end] = σ2vv * Eye(d)
         ks_ref                           = MvNormal.(eachcol(μ), Ref(Σ_true))
 
-        k = ControlledSMC.KLMCKernelBatch(μx, μv, Σ_klmc_struct)
+        k = ControlledSMC.KLMCKernel(μx, μv, Σ_klmc_struct)
 
         x                 = randn(d, 4)
         v                 = randn(d, 4)
         z                 = vcat(x, v)
         logdensities_true = logpdf.(ks_ref, eachcol(z))
-        logdensities      = ControlledSMC.klmc_logpdf_batch(k, x, v)
+        logdensities      = ControlledSMC.klmc_logpdf(k, x, v)
 
         @test logdensities_true ≈ logdensities rtol = 0.001
     end

@@ -30,10 +30,10 @@ function mutate_with_potential(
     v_dist     = MvNormal(Zeros(d), M)
 
     vthalf = sqrt1mα * vtm1 + sqrt(α) * unwhiten(M, randn(rng, size(vtm1)))
-    xt, vt = leapfrog_batch(πt, xtm1, vthalf, ϵ, M)
+    xt, vt = leapfrog(πt, xtm1, vthalf, ϵ, M)
 
-    ℓπt     = logdensity_batch(πt, xt)
-    ℓπtm1   = logdensity_batch(πtm1, xtm1)
+    ℓπt     = logdensity(πt, xt)
+    ℓπtm1   = logdensity(πtm1, xtm1)
     ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 

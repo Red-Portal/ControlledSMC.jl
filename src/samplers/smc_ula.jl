@@ -19,7 +19,7 @@ function mutate_with_potential(
     h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
     ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
 
-    q    = gradient_flow_euler_batch(πt, xtm1, ht, Γ)
+    q    = gradient_flow_euler(πt, xtm1, ht, Γ)
     xt   = q + sqrt(2 * ht) * unwhiten(Γ, randn(rng, eltype(q), size(q)))
     ℓG   = potential(sampler, t, πt, πtm1, xt, xtm1)
     return xt, ℓG, NamedTuple()
@@ -34,7 +34,7 @@ end
 function potential_with_backward(
     ::SMCULA, ::DetailedBalance, t::Int, πt, πtm1, xt::AbstractMatrix, xtm1::AbstractMatrix
 )
-    return logdensity_batch(πt, xtm1) - logdensity_batch(πtm1, xtm1)
+    return logdensity(πt, xtm1) - logdensity(πtm1, xtm1)
 end
 
 function potential_with_backward(
@@ -51,10 +51,10 @@ function potential_with_backward(
     ht        = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
     htm1      = anneal(GeometricAnnealing(path.schedule[t - 1]), h0, hT)
 
-    ℓπtm1_xtm1 = logdensity_batch(πtm1, xtm1)
-    ℓπt_xt     = logdensity_batch(πt, xt)
-    q_fwd      = gradient_flow_euler_batch(πt, xtm1, ht, Γ)
-    q_bwd      = gradient_flow_euler_batch(πtm1, xt, htm1, Γ)
+    ℓπtm1_xtm1 = logdensity(πtm1, xtm1)
+    ℓπt_xt     = logdensity(πt, xt)
+    q_fwd      = gradient_flow_euler(πt, xtm1, ht, Γ)
+    q_bwd      = gradient_flow_euler(πtm1, xt, htm1, Γ)
     K          = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
     L          = MvNormal.(eachcol(q_bwd), Ref(2 * htm1 * Γ))
     ℓk         = logpdf.(K, eachcol(xt))
@@ -75,10 +75,10 @@ function potential_with_backward(
     h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
     ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
 
-    ℓπtm1_xtm1 = logdensity_batch(πtm1, xtm1)
-    ℓπt_xt     = logdensity_batch(πt, xt)
-    q_fwd      = gradient_flow_euler_batch(πt, xtm1, ht, Γ)
-    q_bwd      = gradient_flow_euler_batch(πt, xt, ht, Γ)
+    ℓπtm1_xtm1 = logdensity(πtm1, xtm1)
+    ℓπt_xt     = logdensity(πt, xt)
+    q_fwd      = gradient_flow_euler(πt, xtm1, ht, Γ)
+    q_bwd      = gradient_flow_euler(πt, xt, ht, Γ)
     K          = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
     L          = MvNormal.(eachcol(q_bwd), Ref(2 * ht * Γ))
     ℓK         = logpdf.(K, eachcol(xt))

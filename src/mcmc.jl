@@ -1,15 +1,15 @@
 
-function gradient_flow_euler_batch(π, x::AbstractMatrix, h::Real, Γ)
-    ∇U = -logdensity_gradient_batch(π, x)
+function gradient_flow_euler(π, x::AbstractMatrix, h::Real, Γ)
+    ∇U = -logdensity_gradient(π, x)
     return x - h * Γ * ∇U
 end
 
-function leapfrog_batch(
+function leapfrog(
     target, x::AbstractMatrix, v::AbstractMatrix, δ::Real, M::AbstractMatrix
 )
-    v′ = v + δ / 2 * logdensity_gradient_batch(target, x)
+    v′ = v + δ / 2 * logdensity_gradient(target, x)
     x′ = x + δ * (M \ v′)
-    v′′ = v′ + δ / 2 * logdensity_gradient_batch(target, x′)
+    v′′ = v′ + δ / 2 * logdensity_gradient(target, x′)
     return x′, v′′
 end
 
@@ -22,13 +22,13 @@ struct KLMCKernelCov{S <: Real}
     linvvv::S
 end
 
-struct KLMCKernelBatch{M <: AbstractMatrix, S <: KLMCKernelCov}
+struct KLMCKernel{M <: AbstractArray, S <: KLMCKernelCov}
     μx ::M
     μv ::M
     Σ  ::S
 end
 
-function klmc_logpdf_batch(k::KLMCKernelBatch, x::AbstractMatrix, v::AbstractMatrix)
+function klmc_logpdf(k::KLMCKernel, x::AbstractMatrix, v::AbstractMatrix)
     (; μx, μv, Σ) = k
     (; lxx, lvv, linvxx, linvxv, linvvv) = Σ
 
@@ -47,7 +47,7 @@ function klmc_logpdf_batch(k::KLMCKernelBatch, x::AbstractMatrix, v::AbstractMat
     @. (r2x + r2v + ℓdetΣ + d*log(2π))/-2
 end
 
-function klmc_rand_batch(rng::Random.AbstractRNG, k::KLMCKernelBatch)
+function klmc_rand(rng::Random.AbstractRNG, k::KLMCKernel)
     (; μx, μv, Σ) = k
     (; lxx, lxv, lvv) = Σ
     n_dims      = size(μx, 1)
@@ -79,7 +79,7 @@ function klmc_cov(stepsize::Real, damping::Real)
     KLMCKernelCov(lxx, lxv, lvv, linvxx, linvxv, linvvv)
 end
 
-function klmc_transition_kernel_batch(
+function klmc_transition_kernel(
     target,
     x::AbstractMatrix,
     v::AbstractMatrix,
@@ -89,10 +89,10 @@ function klmc_transition_kernel_batch(
 )
     γ, h = damping, stepsize
     η    = exp(-γ*h)
-    ∇U   = -logdensity_gradient_batch(target, x)
+    ∇U   = -logdensity_gradient(target, x)
     
     μx = x   + (1 - η)/γ*v - (h - (1 - η)/γ)/γ*∇U
     μv = η*v + (1 - η)/γ*∇U
-    KLMCKernelBatch(μx, μv, klmc_cov)
+    KLMCKernel(μx, μv, klmc_cov)
 end
 
