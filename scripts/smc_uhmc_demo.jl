@@ -42,8 +42,8 @@ function main()
 
     display(hline([0.0]; label="True logZ"))
 
-    leapfrog_stepsize  = 1.0
-    mass_matrix        = Eye(d)
+    leapfrog_stepsize = 1.0
+    mass_matrix       = Eye(d)
 
     #sampler = SMCUHMC(leapfrog_stepsize, diffusion_stepsize, mass_matrix)
     #xs, _, stats = ControlledSMC.sample(rng, sampler, path, 1024, 1.0; show_progress=true)
@@ -64,15 +64,15 @@ function main()
 
         logZ = [last(r) for r in res]
 
-        display(violin!(
-            fill(idx, length(logZ)),
-            logZ;
-            fillcolor=:blue,
-            alpha=0.2,
-            label="h=$(diffusion_stepsize)",
-        ))
-        display(dotplot!(
-            fill(idx, length(logZ)), logZ; markercolor=:blue, label=nothing
-        ))
+        display(
+            violin!(
+                fill(idx, length(logZ)),
+                logZ;
+                fillcolor=:blue,
+                alpha=0.2,
+                label="h=$(diffusion_stepsize)",
+            ),
+        )
+        display(dotplot!(fill(idx, length(logZ)), logZ; markercolor=:blue, label=nothing))
     end
 end

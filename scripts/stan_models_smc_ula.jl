@@ -23,15 +23,20 @@ function main()
 
     n_iters  = 64
     proposal = MvNormal(Zeros(d), I)
-    schedule = range(0, 1; length=n_iters).^3
+    schedule = range(0, 1; length=n_iters).^4
     path     = GeometricAnnealingPath(schedule, proposal, prob)
-    h0       = 0.0001
-    hT       = 0.0001
-    Γ        = Eye(d)
-
     n_particles = 2^10
 
-    sampler = SMCULA(h0, hT, TimeCorrectForwardKernel(), Γ, path)
+    #h0       = 0.0001
+    #hT       = 0.0001
+    #Γ        = Eye(d)
+    #sampler = SMCULA(h0, hT, TimeCorrectForwardKernel(), Γ, path)
+
+    h       = 0.9
+    δ       = 0.01
+    M       = Eye(d)
+    sampler = SMCUHMC(δ, h, M)
+
     xs, _, _, stats = ControlledSMC.sample(
         rng, sampler, path, n_particles, 0.5; show_progress=true
     )

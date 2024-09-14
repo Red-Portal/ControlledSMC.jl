@@ -4,14 +4,10 @@ function gradient_flow_euler_batch(x::AbstractMatrix, ∇ℓπ::AbstractMatrix, 
 end
 
 function leapfrog_batch(
-    target,
-    x::AbstractMatrix,
-    v::AbstractMatrix,
-    δ::Real,
-    M::AbstractMatrix
+    target, x::AbstractMatrix, v::AbstractMatrix, δ::Real, M::AbstractMatrix
 )
-    v′ = v + δ/2*logdensity_gradient_batch(target, x)
-    x′ = x + δ*(M\v′)
-    v′′ = v′ + δ/2*logdensity_gradient_batch(target, x′)
-    x′, v′′
+    v′ = v + δ / 2 * logdensity_gradient_batch(target, x)
+    x′ = x + δ * (M \ v′)
+    v′′ = v′ + δ / 2 * logdensity_gradient_batch(target, x′)
+    return x′, v′′
 end
