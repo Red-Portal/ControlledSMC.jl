@@ -1,6 +1,7 @@
 
-function gradient_flow_euler_batch(x::AbstractMatrix, ∇ℓπ::AbstractMatrix, h::Real, Γ)
-    return x + h * Γ * ∇ℓπ
+function gradient_flow_euler_batch(π, x::AbstractMatrix, h::Real, Γ)
+    ∇U = -logdensity_gradient_batch(π, x)
+    return x - h * Γ * ∇U
 end
 
 function leapfrog_batch(
