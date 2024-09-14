@@ -21,10 +21,10 @@ function main()
     prob = StanProblem(post, ".stan/"; force=true)
     d    = LogDensityProblems.dimension(prob)
 
-    n_iters  = 64
+    n_iters = 64
     proposal = MvNormal(Zeros(d), I)
-    schedule = range(0, 1; length=n_iters).^4
-    path     = GeometricAnnealingPath(schedule, proposal, prob)
+    schedule = range(0, 1; length=n_iters) .^ 4
+    path = GeometricAnnealingPath(schedule, proposal, prob)
     n_particles = 2^10
 
     #h0       = 0.0001
@@ -40,6 +40,10 @@ function main()
     xs, _, _, stats = ControlledSMC.sample(
         rng, sampler, path, n_particles, 0.5; show_progress=true
     )
-    display(Plots.plot([stat.ess for stat in stats], ylims=[0, Inf], ylabel="ESS", xlabel="Iterations"))
+    display(
+        Plots.plot(
+            [stat.ess for stat in stats]; ylims=[0, Inf], ylabel="ESS", xlabel="Iterations"
+        ),
+    )
     return stats
 end
