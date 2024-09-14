@@ -1,17 +1,11 @@
 
-struct SMCKLMC{
-    Stepsize<:Real,
-    Sigma<:KLMCKernelCov,
-} <: AbstractSMC
-    stepsize  :: Stepsize
-    damping   :: Stepsize
-    sigma_klmc:: Sigma
+struct SMCKLMC{Stepsize<:Real,Sigma<:KLMCKernelCov} <: AbstractSMC
+    stepsize   :: Stepsize
+    damping    :: Stepsize
+    sigma_klmc :: Sigma
 end
 
-function SMCKLMC(
-    stepsize::Real,
-    damping::Real,
-)
+function SMCKLMC(stepsize::Real, damping::Real)
     Σ_klmc = klmc_cov(stepsize, damping)
     return SMCKLMC(stepsize, damping, Σ_klmc)
 end
@@ -20,10 +14,10 @@ function rand_initial_with_potential(
     rng::Random.AbstractRNG, ::SMCKLMC, path::AbstractPath, n_particles::Int
 )
     (; proposal,) = path
-    x      = rand(rng, proposal, n_particles)
+    x = rand(rng, proposal, n_particles)
     n_dims = size(x, 1)
-    v      = rand(rng, MvNormal(Zeros(n_dims), I), n_particles)
-    ℓG     = zeros(n_particles)
+    v = rand(rng, MvNormal(Zeros(n_dims), I), n_particles)
+    ℓG = zeros(n_particles)
     return vcat(x, v), ℓG
 end
 
@@ -46,8 +40,8 @@ function mutate_with_potential(
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 
     L  = klmc_transition_kernel(πtm1, xt, -vt, h, γ, sigma_klmc)
-    ℓk = klmc_logpdf(K, xt, vt) 
-    ℓl = klmc_logpdf(L, xtm1, vtm1) 
+    ℓk = klmc_logpdf(K, xt, vt)
+    ℓl = klmc_logpdf(L, xtm1, vtm1)
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
     return vcat(xt, vt), ℓG, NamedTuple()
 end

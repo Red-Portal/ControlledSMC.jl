@@ -19,9 +19,9 @@ function mutate_with_potential(
     h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
     ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
 
-    q    = gradient_flow_euler(πt, xtm1, ht, Γ)
-    xt   = q + sqrt(2 * ht) * unwhiten(Γ, randn(rng, eltype(q), size(q)))
-    ℓG   = potential(sampler, t, πt, πtm1, xt, xtm1)
+    q  = gradient_flow_euler(πt, xtm1, ht, Γ)
+    xt = q + sqrt(2 * ht) * unwhiten(Γ, randn(rng, eltype(q), size(q)))
+    ℓG = potential(sampler, t, πt, πtm1, xt, xtm1)
     return xt, ℓG, NamedTuple()
 end
 
@@ -48,8 +48,8 @@ function potential_with_backward(
 )
     (; stepsize_proposal, stepsize_problem, precond, path) = sampler
     h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
-    ht        = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
-    htm1      = anneal(GeometricAnnealing(path.schedule[t - 1]), h0, hT)
+    ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
+    htm1 = anneal(GeometricAnnealing(path.schedule[t - 1]), h0, hT)
 
     ℓπtm1_xtm1 = logdensity(πtm1, xtm1)
     ℓπt_xt     = logdensity(πt, xt)
