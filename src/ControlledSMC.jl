@@ -5,6 +5,7 @@ using ADTypes
 using DifferentiationInterface
 using Distributions
 using FillArrays
+using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
 using PDMats
@@ -45,5 +46,8 @@ export SMCULA
 
 include("samplers/smc_uhmc.jl")
 export SMCUHMC
+
+include("samplers/smc_klmc.jl")
+export SMCKLMC
 
 end

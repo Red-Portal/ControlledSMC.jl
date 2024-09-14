@@ -1,0 +1,53 @@
+
+struct SMCKLMC{
+    Stepsize<:Real,
+    Sigma<:KLMCKernelCov,
+} <: AbstractSMC
+    stepsize  :: Stepsize
+    damping   :: Stepsize
+    sigma_klmc:: Sigma
+end
+
+function SMCKLMC(
+    stepsize::Real,
+    damping::Real,
+)
+    Σ_klmc = klmc_cov(stepsize, damping)
+    return SMCKLMC(stepsize, damping, Σ_klmc)
+end
+
+function rand_initial_with_potential(
+    rng::Random.AbstractRNG, ::SMCKLMC, path::AbstractPath, n_particles::Int
+)
+    (; proposal,) = path
+    x      = rand(rng, proposal, n_particles)
+    n_dims = size(x, 1)
+    v      = rand(rng, MvNormal(Zeros(n_dims), I), n_particles)
+    ℓG     = zeros(n_particles)
+    return vcat(x, v), ℓG
+end
+
+function mutate_with_potential(
+    rng::Random.AbstractRNG, sampler::SMCKLMC, ::Int, πt, πtm1, ztm1::AbstractMatrix
+)
+    (; stepsize, damping, sigma_klmc) = sampler
+    h, γ = stepsize, damping
+
+    d          = size(ztm1, 1) ÷ 2
+    xtm1, vtm1 = ztm1[1:d, :], ztm1[(d + 1):end, :]
+    v_dist     = MvNormal(Zeros(d), I)
+
+    K      = klmc_transition_kernel_batch(πt, xtm1, vtm1, h, γ, sigma_klmc)
+    xt, vt = klmc_rand_batch(rng, K)
+
+    ℓπt     = logdensity_batch(πt, xt)
+    ℓπtm1   = logdensity_batch(πtm1, xtm1)
+    ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
+    ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
+
+    L  = klmc_transition_kernel_batch(πtm1, xt, -vt, h, γ, sigma_klmc)
+    ℓk = klmc_logpdf_batch(K, xt, vt) 
+    ℓl = klmc_logpdf_batch(L, xtm1, vtm1) 
+    ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
+    return vcat(xt, vt), ℓG, NamedTuple()
+end

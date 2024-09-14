@@ -28,4 +28,5 @@ end
 
 include("interface.jl")
 include("unbiasedness.jl")
+include("klmc_gaussian.jl")
 

@@ -19,7 +19,7 @@ function rand_initial_with_potential(
 end
 
 function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCUHMC, t::Int, πt, πtm1, ztm1::AbstractMatrix
+    rng::Random.AbstractRNG, sampler::SMCUHMC, ::Int, πt, πtm1, ztm1::AbstractMatrix
 )
     (; stepsize, damping, mass_matrix) = sampler
     ϵ, α, M = stepsize, damping, mass_matrix
