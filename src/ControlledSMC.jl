@@ -50,4 +50,11 @@ export SMCUHMC
 include("samplers/smc_klmc.jl")
 export SMCKLMC
 
+abstract type AbstractControlledSMC <: AbstractSMC end
+
+include("twist.jl")
+
+include("samplers/csmc_ula.jl")
+export CSMCULA
+
 end
