@@ -32,6 +32,7 @@ function experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
                         -10^10
                     else
                         throw(e)
+                    end
                 end
             end
         end
@@ -66,6 +67,7 @@ function experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
                         -10^10
                     else
                         throw(e)
+                    end
                 end
             end
         end
