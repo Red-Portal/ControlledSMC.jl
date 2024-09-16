@@ -111,6 +111,10 @@ function run_stanmodel(name, ylims)
     experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
     #experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
 end
+
+if !isdir(".stan")
+    mkdir(".stan")
+end
 ```
 
 ```@example stan_vanilla_smc
