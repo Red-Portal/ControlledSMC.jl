@@ -20,12 +20,19 @@ function experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
         ℓZs = @showprogress map(stepsizes) do ϵ
             sampler = SMCUHMC(ϵ, α, Eye(d))
             mean(1:n_reps) do k
-                rng_local = deepcopy(rng)
-                set_counter!(rng_local, k)
-                _, _, _, stats = ControlledSMC.sample(
-                    rng_local, sampler, path, n_particles, 0.5; show_progress=false
-                )
-                last(stats).log_normalizer
+                try 
+                    rng_local = deepcopy(rng)
+                    set_counter!(rng_local, k)
+                    _, _, _, stats = ControlledSMC.sample(
+                        rng_local, sampler, path, n_particles, 0.5; show_progress=false
+                    )
+                    last(stats).log_normalizer
+                catch e
+                    if occursin("log_density", e.msg)
+                        -10^10
+                    else
+                        throw(e)
+                end
             end
         end
         Plots.plot!(
@@ -40,19 +47,26 @@ function experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
 end
 
 function experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
-    stepsizes = 10.0.^range(-4, -1; length=8)
+    stepsizes = 10.0.^range(-5, -2; length=8)
     dampings  = [100., 500., 1000., 5000]
 
     for γ in dampings
         ℓZs = @showprogress map(stepsizes) do h
             sampler = SMCKLMC(γ*h, γ)
             mean(1:n_reps) do k
-                rng_local = deepcopy(rng)
-                set_counter!(rng_local, k)
-                _, _, _, stats = ControlledSMC.sample(
-                    rng_local, sampler, path, n_particles, 0.5; show_progress=false
-                )
-                last(stats).log_normalizer
+                try 
+                    rng_local = deepcopy(rng)
+                    set_counter!(rng_local, k)
+                    _, _, _, stats = ControlledSMC.sample(
+                        rng_local, sampler, path, n_particles, 0.5; show_progress=false
+                    )
+                    last(stats).log_normalizer
+                catch e
+                    if occursin("log_density", e.msg)
+                        -10^10
+                    else
+                        throw(e)
+                end
             end
         end
         Plots.plot!(
@@ -72,12 +86,20 @@ function experiment_smcula(rng, path, d, n_particles, n_reps, ylims)
     ℓZs = @showprogress map(ula_stepsizes) do h
         sampler = SMCULA(h, h, TimeCorrectForwardKernel(), Eye(d), path)
         mean(1:n_reps) do k
-            rng_local = deepcopy(rng)
-            set_counter!(rng_local, k)
-            _, _, _, stats = ControlledSMC.sample(
-                rng_local, sampler, path, n_particles, 0.5; show_progress=false
-            )
-            last(stats).log_normalizer
+            try 
+                rng_local = deepcopy(rng)
+                set_counter!(rng_local, k)
+                _, _, _, stats = ControlledSMC.sample(
+                    rng_local, sampler, path, n_particles, 0.5; show_progress=false
+                )
+                last(stats).log_normalizer
+            catch e
+                if occursin("log_density", e.msg)
+                    -10^10
+                else
+                    throw(e)
+                end
+            end
         end
     end
     Plots.plot!(
@@ -99,7 +121,7 @@ function run_stanmodel(name, ylims)
     seed = (0x38bef07cf9cc549d, 0x49e2430080b3f797)
     rng  = Philox4x(UInt64, seed, 8)
 
-    n_reps      = 32
+    n_reps      = 8
     n_iters     = 32
     proposal    = MvNormal(Zeros(d), I)
     schedule    = range(0, 1; length=n_iters) .^ 4
@@ -109,7 +131,7 @@ function run_stanmodel(name, ylims)
     Plots.plot() |> display
     experiment_smcula( rng, path, d, n_particles, n_reps, ylims)
     experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
-    #experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
+    experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
 end
 
 if !isdir(".stan")
@@ -129,3 +151,4 @@ run_stanmodel("dogs-dogs", (-300, Inf))
 Plots.savefig("vanilla_smc_dogs-dogs.svg")
 ```
 ![](vanilla_smc_dogs-dogs.svg)
+
