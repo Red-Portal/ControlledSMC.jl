@@ -58,13 +58,13 @@ function klmc_rand(rng::Random.AbstractRNG, k::KLMCKernel)
     return x, v
 end
 
-function klmc_cov(stepsize::Real, damping::Real)
-    γ, h = damping, stepsize
-    η    = exp(-γ * h)
+function klmc_cov(stepsize::Real, damping::Real, invmass::Real)
+    γ, h, u = damping, stepsize, invmass
+    η       = exp(-γ * h / u)
 
-    σ2xx = 2 / γ * (h - 2 / γ * (1 - η) + 1 / (2 * γ) * (1 - η^2))
-    σ2xv = 1 / γ * (1 - 2 * η + η^2)
-    σ2vv = 1 - η^2
+    σ2xx = 2 / γ * (h - 2 * (u / γ *  (1 - η)) + (u / (2 * γ) * (1 - η^2)))
+    σ2xv = u / γ * (1 - 2 * η + η^2)
+    σ2vv = u * (1 - η^2)
 
     lxx = sqrt(σ2xx)
     lxv = σ2xv / lxx
@@ -83,13 +83,15 @@ function klmc_transition_kernel(
     v::AbstractMatrix,
     stepsize::Real,
     damping::Real,
+    invmass::Real,
     klmc_cov::KLMCKernelCov,
 )
-    γ, h = damping, stepsize
-    η    = exp(-γ * h)
-    ∇U   = -logdensity_gradient(target, x)
+    γ, h, u = damping, stepsize, invmass
+    η       = exp(-γ * h / u)
+    ∇U      = -logdensity_gradient(target, x)
 
-    μx = x + (1 - η) / γ * v - (h - (1 - η) / γ) / γ * ∇U
-    μv = η * v + (1 - η) / γ * ∇U
+    # Parameterization of Ma et al. (2019)
+    μx = x + (1 - η) / γ * v - (h - (1 - η) / γ * u) / γ * ∇U
+    μv = η * v - (1 - η) / γ * u * ∇U
     return KLMCKernel(μx, μv, klmc_cov)
 end

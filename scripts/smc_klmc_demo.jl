@@ -8,6 +8,7 @@ using Plots, StatsPlots
 using ProgressMeter
 using Random, Random123
 using ForwardDiff, ReverseDiff, Zygote, Tapir
+using PDMats
 
 using ControlledSMC
 
@@ -23,6 +24,20 @@ LogDensityProblems.dimension(prob::Dist) = length(prob.dist)
 
 function LogDensityProblems.logdensity(prob::Dist, x)
     return logpdf(prob.dist, x)
+end
+
+function klmc_mcmc(rng, π, x0, stepsize, damping, invmass, n_samples)
+    n_dims = length(x0)
+    v0     = randn(rng, n_dims)
+    Σ_klmc = ControlledSMC.klmc_cov(stepsize, damping, invmass)
+    post   = zeros(n_dims, n_samples)
+    x, v = reshape(x0, (:, 1)), reshape(v0, (:, 1))
+    for i in 1:n_samples
+        K         = ControlledSMC.klmc_transition_kernel(π, x, v, stepsize, damping, invmass, Σ_klmc)
+        x, v      = ControlledSMC.klmc_rand(rng, K)
+        post[:,i] = x[:, 1]
+    end
+    post
 end
 
 function main()
@@ -42,17 +57,25 @@ function main()
 
     display(hline([0.0]; label="True logZ"))
 
-    stepsize = 0.5
+    stepsize  = 1.0
+    damping   = 2.0
+    invmass   = 1.0
+    n_samples = 1000
+
+    #x0   = rand(rng, proposal)
+    #post = klmc_mcmc(rng, path, x0, stepsize, damping, invmass, 10^4)
+    #plt1 = Plots.scatter(post[1,:], post[2,:])
+    #return plt1
 
     #sampler = SMCKLMC(0.5, 10.0)
     #xs, _, stats = ControlledSMC.sample(rng, sampler, path, 1024, 1.0; show_progress=true)
     #return
 
     n_particles = 256
-    dampings = [5.0, 10.0, 50.0]
+    dampings = [2.0, 5.0, 10.0, 50.0]
 
     for (idx, damping) in enumerate(dampings)
-        sampler = SMCKLMC(stepsize*damping, damping)
+        sampler = SMCKLMC(stepsize*damping, damping, invmass)
 
         res = @showprogress map(1:64) do _
             xs, _, _, stats = ControlledSMC.sample(
