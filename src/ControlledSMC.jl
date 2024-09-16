@@ -2,12 +2,14 @@
 module ControlledSMC
 
 using ADTypes
+using Accessors
 using DifferentiationInterface
 using Distributions
 using FillArrays
 using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
+using Optim
 using PDMats
 using ProgressMeter
 using Random
@@ -22,6 +24,7 @@ abstract type AbstractBackwardKernel end
 
 include("weighing.jl")
 include("mcmc.jl")
+include("utils.jl")
 
 # Target Paths
 include("paths/annealing.jl")
@@ -53,6 +56,8 @@ export SMCKLMC
 abstract type AbstractControlledSMC <: AbstractSMC end
 
 include("twist.jl")
+include("adp.jl")
+export optimize_policy
 
 include("samplers/csmc_ula.jl")
 export CSMCULA

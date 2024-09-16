@@ -1,8 +1,4 @@
 
-function pm_next!(pm, stats::NamedTuple)
-    return ProgressMeter.next!(pm; showvalues=[tuple(s...) for s in pairs(stats)])
-end
-
 function rand_initial_with_potential(
     rng::Random.AbstractRNG, ::AbstractSMC, path::AbstractPath, n_particles::Int
 )
@@ -24,7 +20,7 @@ function sample(
     n_iters = length(path)
     states  = NamedTuple[]
     stats   = NamedTuple[]
-    prog    = ProgressMeter.Progress(n_iters; barlen=31, showspeed=true, enabled=show_progress)
+    prog    = ProgressMeter.Progress(n_iters; showspeed=true, enabled=show_progress)
 
     x, ℓG = rand_initial_with_potential(rng, sampler, path, n_particles)
     ℓZ    = zero(eltype(x))

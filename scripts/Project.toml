@@ -1,5 +1,6 @@
 [deps]
 ADTypes = "47edcb42-4c32-4615-8424-f2b9edc5f35b"
+ColorSchemes = "35d6a980-a343-548e-a6ea-1d62b119f2f4"
 ControlledSMC = "af2ad9dd-f33b-4db6-b90a-e0a5ad30adf0"
 ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
