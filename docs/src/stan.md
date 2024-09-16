@@ -142,7 +142,7 @@ end
 ```
 
 ```@example stan_vanilla_smc
-run_stanmodel("radon_all-radon_hierarchical_intercept_noncentered", (-23000, Inf))
+run_stanmodel("radon_mn-radon_hierarchical_intercept_noncentered", (-23000, Inf))
 Plots.savefig("vanilla_smc_radon.svg")
 ```
 ![](vanilla_smc_radon.svg)
