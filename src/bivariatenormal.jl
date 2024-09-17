@@ -1,19 +1,18 @@
 
-struct BivariateMvNormal{M,L}
-    μ1::M
-    μ2::M
-    L11::L
-    L12::L
-    L22::L
-    Linv11::L
-    Linv12::L
-    Linv22::L
+struct BivariateMvNormal{M, Chol}
+    μ1  ::M
+    μ2  ::M
+    L   ::Chol
+    Linv::Chol
 end
 
 function bivariate_logpdf(
-    p::BivariateMvNormal{<:AbstractArray,<:Real}, x1::AbstractArray, x2::AbstractArray
+    p::BivariateMvNormal{<:AbstractArray, <:BlockCholesky2by2{<:Real}},
+    x1::AbstractArray,
+    x2::AbstractArray
 )
-    (; μ1, μ2, L11, L22, Linv11, Linv12, Linv22) = p
+    (; μ1, μ2, Linv)       = p
+    Linv11, Linv12, Linv22 = Linv.L11, Linv.L12, Linv.L22
 
     d = size(x1, 1)
 
@@ -23,7 +22,7 @@ function bivariate_logpdf(
     x1_std = Linv11 * x1_centered
     x2_std = Linv12 * x1_centered + Linv22 * x2_centered
 
-    ℓdetΣ = 2 * (d * log(L11) + d * log(L22))
+    ℓdetΣ = 2 * (d * -log(Linv11) + d * -log(Linv22))
 
     r21 = sum(abs2, x1_std; dims=1)[1, :]
     r22 = sum(abs2, x2_std; dims=1)[1, :]
@@ -31,9 +30,12 @@ function bivariate_logpdf(
 end
 
 function bivariate_logpdf(
-    p::BivariateMvNormal{<:AbstractArray,<:Diagonal}, x1::AbstractArray, x2::AbstractArray
+    p::BivariateMvNormal{<:AbstractArray,<:BlockCholesky2by2{<:Diagonal}},
+    x1::AbstractArray,
+    x2::AbstractArray
 )
-    (; μ1, μ2, L11, L22, Linv11, Linv12, Linv22) = p
+    (; μ1, μ2, Linv)       = p
+    Linv11, Linv12, Linv22 = Linv.L11, Linv.L12, Linv.L22
 
     d = size(x1, 1)
 
@@ -43,15 +45,19 @@ function bivariate_logpdf(
     x1_std = Linv11 * x1_centered
     x2_std = Linv12 * x1_centered + Linv22 * x2_centered
 
-    ℓdetΣ = 2 * (logdet(L11) + logdet(L22))
+    ℓdetΣ = 2 * (-logdet(Linv11) + -logdet(Linv22))
 
     r21 = sum(abs2, x1_std; dims=1)[1, :]
     r22 = sum(abs2, x2_std; dims=1)[1, :]
     @. (r21 + r22 + ℓdetΣ + 2 * d * log(2π)) / -2
 end
 
-function bivariate_rand(rng::Random.AbstractRNG, p::BivariateMvNormal)
-    (; μ1, μ2, L11, L12, L22) = p
+function bivariate_rand(
+    rng::Random.AbstractRNG,
+    p::BivariateMvNormal{<:AbstractArray,<:BlockCholesky2by2}
+)
+    (; μ1, μ2, L) = p
+    L11, L12, L22 = L.L11, L.L12, L.L22
     d, n = size(μ1, 1), size(μ1, 2)
 
     ϵ1 = randn(rng, d, n)

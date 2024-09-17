@@ -17,22 +17,16 @@ function klmc_mean(
     γ, h = damping, stepsize
     η    = exp(-γ * h)
     ∇U   = -logdensity_gradient(target, x)
-
-    μx = x + (1 - η) / γ * v - (h - (1 - η) / γ) / γ * ∇U
-    μv = η * v + (1 - η) / γ * ∇U
+    μx   = x + (1 - η) / γ * v - (h - (1 - η) / γ) / γ * ∇U
+    μv   = η * v + (1 - η) / γ * ∇U
     return μx, μv
 end
 
 function klmc_cov(stepsize::Real, damping::Real)
     γ, h = damping, stepsize
     η    = exp(-γ * h)
-
     σ2xx = 2 / γ * (h - 2 / γ * (1 - η) + 1 / (2 * γ) * (1 - η^2))
     σ2xv = 1 / γ * (1 - 2 * η + η^2)
     σ2vv = 1 - η^2
-
-    lxx, lxv, lvv          = cholesky2by2(σ2xx, σ2xv, σ2vv)
-    linvxx, linvxv, linvvv = inv2by2(lxx, lxv, lvv)
-
-    return lxx, lxv, lvv, linvxx, linvxv, linvvv
+    return BlockHermitian2by2{typeof(σ2xx)}(σ2xx, σ2xv, σ2vv)
 end

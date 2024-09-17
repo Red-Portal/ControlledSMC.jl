@@ -11,10 +11,12 @@
         σ2xv = 1 / γ * (1 - 2 * η + η^2)
         σ2vv = 1 - η^2
 
-        Σ_klmc_struct = ControlledSMC.klmc_cov(h, γ)
+        Σ_struct    = ControlledSMC.klmc_cov(h, γ)
+        L_struct    = ControlledSMC.cholesky2by2(Σ_struct)
+        Linv_struct = ControlledSMC.inv2by2(L_struct)
 
         μx, μv = randn(d, n), randn(d, n)
-        p      = ControlledSMC.BivariateMvNormal(μx, μv, Σ_klmc_struct...)
+        p      = ControlledSMC.BivariateMvNormal(μx, μv, L_struct, Linv_struct)
 
         Σ                           = zeros(2 * d, 2 * d)
         Σ[1:d, 1:d]                 = σ2xx * Eye(d)
@@ -38,15 +40,15 @@
         d = 3
         n = 4
 
-        Σ11 = Diagonal(1:3)
-        Σ12 = 0.1 * Diagonal(1:3)
-        Σ22 = 2 * Diagonal(1:3)
-
-        L11, L12, L22          = ControlledSMC.cholesky2by2(Σ11, Σ12, Σ22)
-        Linv11, Linv12, Linv22 = ControlledSMC.inv2by2(L11, L12, L22)
+        Σ11  = 1.0 * Diagonal(1:3)
+        Σ12  = 0.1 * Diagonal(1:3)
+        Σ22  = 2.0 * Diagonal(1:3)
+        Σ    = ControlledSMC.BlockHermitian2by2(Σ11, Σ12, Σ22)
+        L    = ControlledSMC.cholesky2by2(Σ)
+        Linv = ControlledSMC.inv2by2(L)
 
         μ1, μ2 = randn(d, n), randn(d, n)
-        p      = ControlledSMC.BivariateMvNormal(μ1, μ2, L11, L12, L22, Linv11, Linv12, Linv22)
+        p      = ControlledSMC.BivariateMvNormal(μ1, μ2, L, Linv)
 
         Σ                           = zeros(2 * d, 2 * d)
         Σ[1:d, 1:d]                 = Σ11
