@@ -12,11 +12,7 @@ function leapfrog(target, x::AbstractMatrix, v::AbstractMatrix, δ::Real, M::Abs
 end
 
 function klmc_mean(
-    target,
-    x::AbstractArray,
-    v::AbstractArray,
-    stepsize::Real,
-    damping::Real,
+    target, x::AbstractArray, v::AbstractArray, stepsize::Real, damping::Real
 )
     γ, h = damping, stepsize
     η    = exp(-γ * h)
@@ -24,7 +20,7 @@ function klmc_mean(
 
     μx = x + (1 - η) / γ * v - (h - (1 - η) / γ) / γ * ∇U
     μv = η * v + (1 - η) / γ * ∇U
-    μx, μv
+    return μx, μv
 end
 
 function klmc_cov(stepsize::Real, damping::Real)

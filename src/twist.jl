@@ -1,29 +1,27 @@
 
 function rand_twist_mvnormal(
-    rng    ::Random.AbstractRNG,
+    rng::Random.AbstractRNG,
     twist,
-    μs     ::AbstractMatrix,
-    Σ      ::Union{<:Diagonal, <:FillArrays.Eye, <:PDMats.ScalMat},
+    μs::AbstractMatrix,
+    Σ::Union{<:Diagonal,<:FillArrays.Eye,<:PDMats.ScalMat},
 )
-    (; a, b,)  = twist
+    (; a, b)   = twist
     A          = Diagonal(a)
-    K          = Diagonal(inv(2*A + inv(Σ)))
-    μs_twisted = K*(Σ\μs .- b)
-    μs_twisted + unwhiten(K, randn(rng, size(μs)))
+    K          = Diagonal(inv(2 * A + inv(Σ)))
+    μs_twisted = K * (Σ \ μs .- b)
+    return μs_twisted + unwhiten(K, randn(rng, size(μs)))
 end
 
 function twist_mvnormal_logmarginal(
-    twist,
-    μ     ::AbstractArray,
-    Σ     ::Union{<:Diagonal, <:FillArrays.Eye, <:PDMats.ScalMat},
+    twist, μ::AbstractArray, Σ::Union{<:Diagonal,<:FillArrays.Eye,<:PDMats.ScalMat}
 )
-    (; a, b, c)  = twist
-    A     = Diagonal(a)
-    K     = Diagonal(inv(2*A + inv(Σ)))
+    (; a, b, c) = twist
+    A = Diagonal(a)
+    K = Diagonal(inv(2 * A + inv(Σ)))
     ℓdetΣ = logdet(Σ)
     ℓdetK = logdet(K)
-    z     = Σ\μ .- b
-    ((-ℓdetΣ + ℓdetK) .+ (quad(K, z) - invquad(Σ, μ)))/2 .- c
+    z = Σ \ μ .- b
+    return ((-ℓdetΣ + ℓdetK) .+ (quad(K, z) - invquad(Σ, μ))) / 2 .- c
 end
 
 # function rand_twist_mvnormal(
@@ -53,6 +51,5 @@ end
 
 function twist_logdensity(twist, x)
     (; a, b, c) = twist
-    -quad(Diagonal(a), x) - (b'*x)[1,:] .- c   
+    return -quad(Diagonal(a), x) - (b' * x)[1, :] .- c
 end
-

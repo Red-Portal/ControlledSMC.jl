@@ -1,5 +1,6 @@
 
-struct CSMCULA{SMCBase<:SMCULA,Path<:AbstractPath,Policy<:AbstractVector} <: AbstractControlledSMC
+struct CSMCULA{SMCBase<:SMCULA,Path<:AbstractPath,Policy<:AbstractVector} <:
+       AbstractControlledSMC
     smc    :: SMCBase
     path   :: Path
     policy :: Policy
@@ -13,18 +14,20 @@ function CSMCULA(smc::SMCULA, path::AbstractPath)
     return CSMCULA{typeof(smc),typeof(path),typeof(policy)}(smc, path, policy)
 end
 
-function twist_double_mvnormal_logmarginal(sampler::CSMCULA, t::Int, ψ_first, ψ_second, state)
+function twist_double_mvnormal_logmarginal(
+    sampler::CSMCULA, t::Int, ψ_first, ψ_second, state
+)
     (; smc, path) = sampler
     (; stepsize_proposal, stepsize_problem, precond) = smc
-    h0, hT, Γ  = stepsize_proposal, stepsize_problem, precond
-    ht   = anneal(GeometricAnnealing(path.schedule[t]),     h0, hT)
+    h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
+    ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
 
-    q          = state.q
-    (; a, b)   = ψ_first
-    A          = Diagonal(a)
-    K          = inv(4*ht*A + inv(Γ))
-    μ_twisted  = K*(Γ\q .- 2*ht*b)
-    Σ_twisted  = 2*ht*K
+    q         = state.q
+    (; a, b)  = ψ_first
+    A         = Diagonal(a)
+    K         = inv(4 * ht * A + inv(Γ))
+    μ_twisted = K * (Γ \ q .- 2 * ht * b)
+    Σ_twisted = 2 * ht * K
     return twist_mvnormal_logmarginal(ψ_second, μ_twisted, Σ_twisted)
 end
 
@@ -49,7 +52,7 @@ function rand_initial_with_potential(
     ℓG0  = zero(eltype(x))
     ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ, Σ)
     ℓψ0  = twist_logdensity(ψ0, x)
-    πtp1 = step(path, 2, x, x[1,:])
+    πtp1 = step(path, 2, x, x[1, :])
     ℓMψ  = twist_kernel_logmarginal(sampler, policy[2], πtp1, 2, x)
     ℓGψ  = @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
 

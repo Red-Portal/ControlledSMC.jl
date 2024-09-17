@@ -10,7 +10,7 @@
 
     Σ_klmc_struct = ControlledSMC.klmc_cov(h, γ)
 
-    Σ_true = Hermitian([σ2xx σ2xv; σ2xv σ2vv])
+    Σ_true    = Hermitian([σ2xx σ2xv; σ2xv σ2vv])
     L_true    = cholesky(Σ_true).L
     Linv_true = inv(L_true)
 

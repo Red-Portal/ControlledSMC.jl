@@ -1,34 +1,34 @@
 
-function fit_quadratic(x::AbstractMatrix{T}, y::AbstractVector{T}) where {T <: Real}
-    d, n = size(x,1), size(x,2)
-    @assert size(x,2) == length(y)
+function fit_quadratic(x::AbstractMatrix{T}, y::AbstractVector{T}) where {T<:Real}
+    d, n = size(x, 1), size(x, 2)
+    @assert size(x, 2) == length(y)
 
-    X   = vcat(x.^2, x, ones(T, 1, n))' |> Array
-    β   = ones(2*d + 1)
+    X   = Array(vcat(x .^ 2, x, ones(T, 1, n))')
+    β   = ones(2 * d + 1)
     ϵ   = zero(T)
-    Xty = X'*y
-    XtX = Hermitian(X'*X)
+    Xty = X' * y
+    XtX = Hermitian(X' * X)
 
-    func(β_) = sum(abs2, X*β_ - y)
+    func(β_) = sum(abs2, X * β_ - y)
     function grad!(g, β_)
-        g[:] = 2*(XtX*β_ - Xty)
+        return g[:] = 2 * (XtX * β_ - Xty)
     end
     function hess!(H, β_)
-        H[:,:] = 2*XtX
+        return H[:, :] = 2 * XtX
     end
-    df    = TwiceDifferentiable(func, grad!, hess!, β)
+    df = TwiceDifferentiable(func, grad!, hess!, β)
 
-    lower = vcat(fill(ϵ, d), fill(typemin(T), d+1))
-    upper = fill(typemax(T), 2*d+1)
+    lower = vcat(fill(ϵ, d), fill(typemin(T), d + 1))
+    upper = fill(typemax(T), 2 * d + 1)
     dfc   = TwiceDifferentiableConstraints(lower, upper)
     res   = optimize(df, dfc, β, IPNewton())
 
     β = Optim.minimizer(res)
     a = β[1:d]
-    b = β[d+1:2*d]
+    b = β[(d + 1):(2 * d)]
     c = β[end]
-    
-    a, b, c, sum(abs2, X*β - y)
+
+    return a, b, c, sum(abs2, X * β - y)
 end
 
 function optimize_policy(sampler::AbstractControlledSMC, states; show_progress=true)
@@ -47,13 +47,13 @@ function optimize_policy(sampler::AbstractControlledSMC, states; show_progress=t
             log_potential
         else
             ℓM = twist_double_mvnormal_logmarginal(
-                sampler, t+1, policy[t+1], ψ_recur, states[t+1]
+                sampler, t + 1, policy[t + 1], ψ_recur, states[t + 1]
             )
             log_potential + ℓM
         end
 
         Δa, Δb, Δc, rmse = fit_quadratic(particles, -V)
-        rmse_norm        = rmse/sqrt(size(particles, 2))
+        rmse_norm        = rmse / sqrt(size(particles, 2))
 
         pm_next!(prog, (rmse=rmse_norm, iteration=t))
 
@@ -68,7 +68,9 @@ function optimize_policy(sampler::AbstractControlledSMC, states; show_progress=t
 
     if show_progress
         println("\n")
-        lineplot(1:T, reverse(rmses), title="ADP RMSE", xlabel="Iteration", ylabel="RMSE") |> display
+        display(lineplot(
+            1:T, reverse(rmses); title="ADP RMSE", xlabel="Iteration", ylabel="RMSE"
+        ))
     end
 
     @set sampler.policy = policy_next

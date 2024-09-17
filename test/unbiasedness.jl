@@ -6,7 +6,7 @@ function run_unbiasedness_test(sampler, path, n_particles, n_test_samples, Z_tru
     end
     Z   = exp.(ℓZ)
     res = tTest1S(Z; refmean=Z_true, verbose=false)
-    res.p 
+    return res.p
 end
 
 @testset "unbiasedness" begin
@@ -37,12 +37,12 @@ end
         ("SMCKLMC", SMCKLMC(5.0, 10.0)),
     ]
         pvalue = run_unbiasedness_test(sampler, path, n_particles, n_test_samples, Z_true)
-        @test if pvalue > pvalue_threshold 
+        @test if pvalue > pvalue_threshold
             true
         else
             # Bonferroni-corrected second try with larger sample size
-            pvalue2 = run_test(sampler, path, 4*n_particles, Z_true)
-            2*pvalue2 > pvalue_threshold
+            pvalue2 = run_test(sampler, path, 4 * n_particles, Z_true)
+            2 * pvalue2 > pvalue_threshold
         end
     end
 end
