@@ -20,7 +20,12 @@ function logdensity(prob::AnnealedDensityProblem, x)
     (; annealing, proposal, problem) = prob
     ℓπ0 = logpdf(proposal, x)
     ℓπT = LogDensityProblems.logdensity(problem, x)
-    return anneal(annealing, ℓπ0, ℓπT)
+    ℓπt = anneal(annealing, ℓπ0, ℓπT)
+    if isfinite(ℓπt)
+        return ℓπt
+    else
+        return zero(ℓπt)
+    end
 end
 
 function logdensity(prob::AnnealedDensityProblem, xs::AbstractMatrix)
@@ -33,7 +38,11 @@ function logdensity_and_gradient(prob::AnnealedDensityProblem, x::AbstractVector
     ℓπT, ∇ℓπT = LogDensityProblems.logdensity_and_gradient(problem, x)
     ℓπt = anneal(annealing, ℓπ0, ℓπT)
     ∇ℓπt = anneal(annealing, ∇ℓπ0, ∇ℓπT)
-    return ℓπt, ∇ℓπt
+    if isfinite(ℓπt)
+        return ℓπt, ∇ℓπt
+    else
+        return ℓπt, zero(∇ℓπt)
+    end
 end
 
 function logdensity_gradient(prob::AnnealedDensityProblem, x::AbstractVector)
