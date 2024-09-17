@@ -1,6 +1,16 @@
 
+function run_unbiasedness_test(sampler, path, n_particles, n_test_samples, Z_true)
+    ℓZ  = map(1:n_test_samples) do _
+        _, _, _, stats = ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
+        last(stats).log_normalizer
+    end
+    Z   = exp.(ℓZ)
+    res = tTest1S(Z; refmean=Z_true, verbose=false)
+    res.p 
+end
+
 @testset "unbiasedness" begin
-    pvalue_threshold = 0.01
+    pvalue_threshold = 0.1
     n_test_samples   = 128
 
     # Problem Setup
@@ -26,13 +36,13 @@
         ("SMCUHMC", SMCUHMC(1.0, 0.5, Eye(d))),
         ("SMCKLMC", SMCKLMC(5.0, 10.0)),
     ]
-        ℓZ  = map(1:n_test_samples) do _
-            xs, _, _, stats = ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
-            last(stats).log_normalizer
+        pvalue = run_unbiasedness_test(sampler, path, n_particles, n_test_samples, Z_true)
+        @test if pvalue > pvalue_threshold 
+            true
+        else
+            # Bonferroni-corrected second try with larger sample size
+            pvalue2 = run_test(sampler, path, 4*n_particles, Z_true)
+            2*pvalue2 > pvalue_threshold
         end
-        Z   = exp.(ℓZ)
-        res = tTest1S(Z; refmean=Z_true, verbose=false)
-
-        @test res.p > pvalue_threshold
     end
 end
