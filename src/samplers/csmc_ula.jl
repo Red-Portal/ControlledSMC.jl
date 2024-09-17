@@ -13,6 +13,21 @@ function CSMCULA(smc::SMCULA, path::AbstractPath)
     return CSMCULA{typeof(smc),typeof(path),typeof(policy)}(smc, path, policy)
 end
 
+function twist_double_mvnormal_logmarginal(sampler::CSMCULA, t::Int, ψ_first, ψ_second, state)
+    (; smc, path) = sampler
+    (; stepsize_proposal, stepsize_problem, precond) = smc
+    h0, hT, Γ  = stepsize_proposal, stepsize_problem, precond
+    ht   = anneal(GeometricAnnealing(path.schedule[t]),     h0, hT)
+
+    q          = state.q
+    (; a, b)   = ψ_first
+    A          = Diagonal(a)
+    K          = inv(4*ht*A + inv(Γ))
+    μ_twisted  = K*(Γ\q .- 2*ht*b)
+    Σ_twisted  = 2*ht*K
+    return twist_mvnormal_logmarginal(ψ_second, μ_twisted, Σ_twisted)
+end
+
 function twist_kernel_logmarginal(csmc::CSMCULA, twist, πt, t::Int, xtm1::AbstractMatrix)
     (; stepsize_proposal, stepsize_problem, precond, path) = csmc.smc
     h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
