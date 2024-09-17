@@ -29,13 +29,32 @@ function bivariate_logpdf(
 
     r21 = sum(abs2, x1_std; dims=1)[1, :]
     r22 = sum(abs2, x2_std; dims=1)[1, :]
-    @. (r21 + r22 + ℓdetΣ + d * log(2π)) / -2
+    @. (r21 + r22 + ℓdetΣ + 2*d * log(2π)) / -2
 end
 
-function bivariate_rand(
-    rng::Random.AbstractRNG,
-    p  ::BivariateMvNormal{<:AbstractMatrix, <:Real}
+function bivariate_logpdf(
+    p ::BivariateMvNormal{<:AbstractArray, <:Diagonal},
+    x1::AbstractArray,
+    x2::AbstractArray
 )
+    (; μ1, μ2, L11, L22, Linv11, Linv12, Linv22) = p
+
+    d = size(x1, 1)
+
+    x1_centered = x1 - μ1
+    x2_centered = x2 - μ2
+
+    x1_std = Linv11 * x1_centered
+    x2_std = Linv12 * x1_centered + Linv22 * x2_centered
+
+    ℓdetΣ = 2 * (logdet(L11) + logdet(L22))
+
+    r21 = sum(abs2, x1_std; dims=1)[1, :]
+    r22 = sum(abs2, x2_std; dims=1)[1, :]
+    @. (r21 + r22 + ℓdetΣ + 2*d * log(2π)) / -2
+end
+
+function bivariate_rand(rng::Random.AbstractRNG, p::BivariateMvNormal)
     (; μ1, μ2, L11, L12, L22) = p
     d, n = size(μ1, 1), size(μ1, 2)
 
