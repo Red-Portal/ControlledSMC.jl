@@ -1,5 +1,5 @@
 
-struct SMCKLMC{Stepsize<:Real,Sigma<:KLMCKernelCov} <: AbstractSMC
+struct SMCKLMC{Stepsize<:Real,Sigma} <: AbstractSMC
     stepsize   :: Stepsize
     damping    :: Stepsize
     sigma_klmc :: Sigma
@@ -31,17 +31,20 @@ function mutate_with_potential(
     xtm1, vtm1 = ztm1[1:d, :], ztm1[(d + 1):end, :]
     v_dist     = MvNormal(Zeros(d), I)
 
-    K      = klmc_transition_kernel(πt, xtm1, vtm1, h, γ, sigma_klmc)
-    xt, vt = klmc_rand(rng, K)
+    μx, μv = klmc_mean(πt, xtm1, vtm1, h, γ)
+    K      = BivariateMvNormal(μx, μv, sigma_klmc...)
+    xt, vt = bivariate_rand(rng, K)
 
     ℓπt     = logdensity(πt, xt)
     ℓπtm1   = logdensity(πtm1, xtm1)
     ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 
-    L  = klmc_transition_kernel(πtm1, xt, -vt, h, γ, sigma_klmc)
-    ℓk = klmc_logpdf(K, xt, vt)
-    ℓl = klmc_logpdf(L, xtm1, vtm1)
+    μx_back, μv_back = klmc_mean(πtm1, xt, -vt, h, γ)
+    L                = BivariateMvNormal(μx_back, μv_back, sigma_klmc...)
+
+    ℓk = bivariate_logpdf(K, xt, vt)
+    ℓl = bivariate_logpdf(L, xtm1, vtm1)
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
     return vcat(xt, vt), ℓG, NamedTuple()
 end

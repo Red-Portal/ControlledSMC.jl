@@ -15,6 +15,7 @@ using ProgressMeter
 using Random
 using ReverseDiff
 using Statistics
+using UnicodePlots
 
 abstract type AbstractSMC end
 
@@ -25,6 +26,8 @@ abstract type AbstractBackwardKernel end
 include("weighing.jl")
 include("mcmc.jl")
 include("utils.jl")
+include("linalg.jl")
+include("bivariatenormal.jl")
 
 # Target Paths
 include("paths/annealing.jl")

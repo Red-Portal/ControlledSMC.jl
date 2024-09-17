@@ -26,7 +26,9 @@ function LogDensityProblems.logdensity(prob::Dist, x)
     return logpdf(prob.dist, x)
 end
 
-include("interface.jl")
-include("unbiasedness.jl")
-include("klmc_gaussian.jl")
+#include("interface.jl")
+#include("unbiasedness.jl")
+include("klmc.jl")
+#include("bivariatenormal.jl")
+include("linalg.jl")
 
