@@ -37,11 +37,10 @@ function bivariate_rand(
     p  ::BivariateMvNormal{<:AbstractMatrix, <:Real}
 )
     (; μ1, μ2, L11, L12, L22) = p
-    d = size(μ1, 1)
-    N = size(μ1, 2)
+    d, n = size(μ1, 1), size(μ1, 2)
 
-    ϵ1 = randn(rng, d, n_particles)
-    ϵ2 = randn(rng, d, n_particles)
+    ϵ1 = randn(rng, d, n)
+    ϵ2 = randn(rng, d, n)
     x1 = L11 * ϵ1 + μ1
     x2 = L12 * ϵ1 + L22 * ϵ2 + μ2
     return x1, x2
