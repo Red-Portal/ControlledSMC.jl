@@ -16,7 +16,7 @@ struct AnnealedDensityProblem{
     adtype    :: AD
 end
 
-function LogDensityProblems.logdensity(prob::AnnealedDensityProblem, x)
+function LogDensityProblems.logdensity(prob::AnnealedDensityProblem, x::AbstractVector)
     (; annealing, proposal, problem) = prob
     ℓπ0 = logpdf(proposal, x)
     ℓπT = LogDensityProblems.logdensity(problem, x)
@@ -26,10 +26,6 @@ function LogDensityProblems.logdensity(prob::AnnealedDensityProblem, x)
     else
         return zero(ℓπt)
     end
-end
-
-function LogDensityProblems.logdensity(prob::AnnealedDensityProblem, xs::AbstractMatrix)
-    return LogDensityProblems.logdensity.(Ref(prob), eachcol(xs))
 end
 
 function LogDensityProblems.logdensity_and_gradient(prob::AnnealedDensityProblem, x::AbstractVector)
@@ -43,18 +39,4 @@ function LogDensityProblems.logdensity_and_gradient(prob::AnnealedDensityProblem
     else
         return ℓπt, zero(∇ℓπt)
     end
-end
-
-function logdensity_gradient(prob::AnnealedDensityProblem, x::AbstractVector)
-    _, ∇ℓπt = LogDensityProblems.logdensity_and_gradient(prob, x)
-    return ∇ℓπt
-end
-
-function logdensity_gradient(prob::AnnealedDensityProblem, xs::AbstractMatrix)
-    return mapslices(xi -> logdensity_gradient(prob, Vector(xi)), xs; dims=1)
-end
-
-function LogDensityProblems.logdensity_and_gradient(prob::AnnealedDensityProblem, xs::AbstractMatrix)
-    res = LogDensityProblems.logdensity_and_gradient.(Ref(prob), xs)
-    return first.(res), last.(res)
 end

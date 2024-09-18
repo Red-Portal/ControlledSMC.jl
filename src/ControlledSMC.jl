@@ -28,6 +28,7 @@ include("mcmc.jl")
 include("utils.jl")
 include("linalg.jl")
 include("bivariatenormal.jl")
+include("logdensity.jl")
 
 # Target Paths
 include("paths/annealing.jl")
@@ -64,5 +65,8 @@ export optimize_policy
 
 include("samplers/csmc_ula.jl")
 export CSMCULA
+
+include("samplers/csmc_klmc.jl")
+export CSMCKLMC
 
 end
