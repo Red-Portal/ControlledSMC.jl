@@ -12,8 +12,8 @@
         σ2vv = 1 - η^2
 
         Σ_struct    = ControlledSMC.klmc_cov(h, γ)
-        L_struct    = ControlledSMC.cholesky2by2(Σ_struct)
-        Linv_struct = ControlledSMC.inv2by2(L_struct)
+        L_struct    = cholesky(Σ_struct)
+        Linv_struct = inv(L_struct)
 
         μx, μv = randn(d, n), randn(d, n)
         p      = ControlledSMC.BivariateMvNormal(μx, μv, L_struct, Linv_struct)
@@ -44,8 +44,8 @@
         Σ21  = 0.1 * Diagonal(1:3)
         Σ22  = 2.0 * Diagonal(1:3)
         Σ    = ControlledSMC.BlockHermitian2by2(Σ11, Σ21, Σ22)
-        L    = ControlledSMC.cholesky2by2(Σ)
-        Linv = ControlledSMC.inv2by2(L)
+        L    = cholesky(Σ)
+        Linv = inv(L)
 
         μ1, μ2 = randn(d, n), randn(d, n)
         p      = ControlledSMC.BivariateMvNormal(μ1, μ2, L, Linv)

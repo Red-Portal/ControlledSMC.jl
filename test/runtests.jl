@@ -11,6 +11,7 @@ using ReverseDiff
 using Test
 
 using ControlledSMC
+using ControlledSMC: *, +
 
 struct Dist{D}
     dist::D
