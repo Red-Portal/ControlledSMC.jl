@@ -41,9 +41,9 @@
         n = 4
 
         Σ11  = 1.0 * Diagonal(1:3)
-        Σ12  = 0.1 * Diagonal(1:3)
+        Σ21  = 0.1 * Diagonal(1:3)
         Σ22  = 2.0 * Diagonal(1:3)
-        Σ    = ControlledSMC.BlockHermitian2by2(Σ11, Σ12, Σ22)
+        Σ    = ControlledSMC.BlockHermitian2by2(Σ11, Σ21, Σ22)
         L    = ControlledSMC.cholesky2by2(Σ)
         Linv = ControlledSMC.inv2by2(L)
 
@@ -52,8 +52,8 @@
 
         Σ                           = zeros(2 * d, 2 * d)
         Σ[1:d, 1:d]                 = Σ11
-        Σ[1:d, (d + 1):end]         = Σ12
-        Σ[(d + 1):end, 1:d]         = Σ12
+        Σ[1:d, (d + 1):end]         = Σ21
+        Σ[(d + 1):end, 1:d]         = Σ21
         Σ[(d + 1):end, (d + 1):end] = Σ22
         p_true                      = MvNormal.(eachcol(vcat(μ1, μ2)), Ref(Σ))
 
