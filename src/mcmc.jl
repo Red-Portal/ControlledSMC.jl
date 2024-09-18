@@ -18,7 +18,7 @@ function klmc_mean(
     η    = exp(-γ * h)
     ∇U   = -logdensity_gradient(target, x)
     μx   = x + (1 - η) / γ * v - (h - (1 - η) / γ) / γ * ∇U
-    μv   = η * v + (1 - η) / γ * ∇U
+    μv   = η * v - (1 - η) / γ * ∇U
     return μx, μv
 end
 
