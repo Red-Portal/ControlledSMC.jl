@@ -39,8 +39,8 @@ function mutate_with_potential(
     K      = BivariateMvNormal(μx, μv, L_klmc, Linv_klmc)
     xt, vt = bivariate_rand(rng, K)
 
-    ℓπt     = logdensity(πt, xt)
-    ℓπtm1   = logdensity(πtm1, xtm1)
+    ℓπt     = LogDensityProblems.logdensity(πt, xt)
+    ℓπtm1   = LogDensityProblems.logdensity(πtm1, xtm1)
     ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 

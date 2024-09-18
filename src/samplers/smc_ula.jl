@@ -34,7 +34,7 @@ end
 function potential_with_backward(
     ::SMCULA, ::DetailedBalance, t::Int, πt, πtm1, xt::AbstractMatrix, xtm1::AbstractMatrix
 )
-    return logdensity(πt, xtm1) - logdensity(πtm1, xtm1)
+    return LogDensityProblems.logdensity(πt, xtm1) - LogDensityProblems.logdensity(πtm1, xtm1)
 end
 
 function potential_with_backward(
@@ -51,8 +51,8 @@ function potential_with_backward(
     ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
     htm1 = anneal(GeometricAnnealing(path.schedule[t - 1]), h0, hT)
 
-    ℓπtm1_xtm1 = logdensity(πtm1, xtm1)
-    ℓπt_xt     = logdensity(πt, xt)
+    ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
+    ℓπt_xt     = LogDensityProblems.logdensity(πt, xt)
     q_fwd      = gradient_flow_euler(πt, xtm1, ht, Γ)
     q_bwd      = gradient_flow_euler(πtm1, xt, htm1, Γ)
     K          = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
@@ -75,8 +75,8 @@ function potential_with_backward(
     h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
     ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
 
-    ℓπtm1_xtm1 = logdensity(πtm1, xtm1)
-    ℓπt_xt     = logdensity(πt, xt)
+    ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
+    ℓπt_xt     = LogDensityProblems.logdensity(πt, xt)
     q_fwd      = gradient_flow_euler(πt, xtm1, ht, Γ)
     q_bwd      = gradient_flow_euler(πt, xt, ht, Γ)
     K          = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))

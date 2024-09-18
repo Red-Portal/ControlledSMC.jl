@@ -32,8 +32,8 @@ function mutate_with_potential(
     vthalf = sqrt1mα * vtm1 + sqrt(α) * unwhiten(M, randn(rng, size(vtm1)))
     xt, vt = leapfrog(πt, xtm1, vthalf, ϵ, M)
 
-    ℓπt     = logdensity(πt, xt)
-    ℓπtm1   = logdensity(πtm1, xtm1)
+    ℓπt     = LogDensityProblems.logdensity(πt, xt)
+    ℓπtm1   = LogDensityProblems.logdensity(πtm1, xtm1)
     ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 
