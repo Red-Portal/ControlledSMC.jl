@@ -1,16 +1,17 @@
 
-struct SMCKLMC{Stepsize<:Real,Chol<:BlockCholesky2by2} <: AbstractSMC
+struct SMCKLMC{Stepsize<:Real,Sigma<:BlockHermitian2by2,Chol<:BlockCholesky2by2} <: AbstractSMC
     stepsize     :: Stepsize
     damping      :: Stepsize
+    sigma_klmc   :: Sigma
     chol_klmc    :: Chol
     cholinv_klmc :: Chol
 end
 
 function SMCKLMC(stepsize::Real, damping::Real)
     Σ    = klmc_cov(stepsize, damping)
-    L    = cholesky2by2(Σ)
-    Linv = inv2by2(L)
-    return SMCKLMC(stepsize, damping, L, Linv)
+    L    = cholesky(Σ)
+    Linv = inv(L)
+    return SMCKLMC(stepsize, damping, Σ, L, Linv)
 end
 
 function rand_initial_with_potential(
