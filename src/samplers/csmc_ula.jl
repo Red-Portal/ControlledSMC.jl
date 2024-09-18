@@ -47,7 +47,7 @@ function rand_initial_with_potential(
     (; policy,) = sampler
     ψ0 = first(policy)
     μ, Σ = mean(proposal), Distributions._cov(proposal)
-    x = rand_twist_mvnormal(rng, ψ0, repeat(μ, 1, n_particles), Σ)
+    x = twist_mvnormal_rand(rng, ψ0, repeat(μ, 1, n_particles), Σ)
 
     ℓG0  = zero(eltype(x))
     ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ, Σ)
@@ -69,7 +69,7 @@ function mutate_with_potential(
 
     ψ = policy[t]
     q = gradient_flow_euler(πt, xtm1, ht, Γ)
-    xt = rand_twist_mvnormal(rng, ψ, q, 2 * ht * Γ)
+    xt = twist_mvnormal_rand(rng, ψ, q, 2 * ht * Γ)
 
     ℓG  = potential(smc, t, πt, πtm1, xt, xtm1)
     ℓψ  = twist_logdensity(ψ, xt)
