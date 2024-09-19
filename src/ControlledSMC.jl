@@ -31,7 +31,7 @@ include("linalg/pdmat.jl")
 include("weighing.jl")
 include("mcmc.jl")
 include("utils.jl")
-include("batchnormal.jl")
+include("batchmvnormal.jl")
 include("logdensity.jl")
 
 # Target Paths

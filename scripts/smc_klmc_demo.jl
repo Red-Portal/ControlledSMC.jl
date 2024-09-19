@@ -44,6 +44,8 @@ function main()
 
     stepsize = 0.5
 
+    
+
     #sampler = SMCKLMC(0.5, 10.0)
     #xs, _, stats = ControlledSMC.sample(rng, sampler, path, 1024, 1.0; show_progress=true)
     #return
