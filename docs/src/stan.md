@@ -53,7 +53,7 @@ function experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
 
     for γ in dampings
         ℓZs = @showprogress map(stepsizes) do h
-            sampler = SMCKLMC(γ*h, γ)
+            sampler = SMCKLMC(d, γ*h, γ)
             mean(1:n_reps) do k
                 try 
                     rng_local = deepcopy(rng)
