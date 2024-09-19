@@ -28,5 +28,5 @@ function Base.rand(
     ϵ1 = randn(rng, d, n)
     ϵ2 = randn(rng, d, n)
     ϵ  = BatchVectors2(ϵ1, ϵ2)
-    return L*(ϵ + μ)
+    return L*ϵ + μ
 end
