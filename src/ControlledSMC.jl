@@ -23,11 +23,15 @@ abstract type AbstractPath end
 
 abstract type AbstractBackwardKernel end
 
+include("linalg/types.jl")
+include("linalg/blas1.jl")
+include("linalg/blas2.jl")
+include("linalg/pdmat.jl")
+
 include("weighing.jl")
 include("mcmc.jl")
 include("utils.jl")
-include("linalg.jl")
-include("bivariatenormal.jl")
+include("batchnormal.jl")
 include("logdensity.jl")
 
 # Target Paths
@@ -41,11 +45,9 @@ export AdaptiveGeometricAnnealing
 
 # Backward Kernels
 include("backwardkernel.jl")
-
 export DetailedBalance, ForwardKernel, TimeCorrectForwardKernel
 
 include("sample.jl")
-
 export sample
 
 include("samplers/smc_ula.jl")
@@ -57,7 +59,7 @@ export SMCUHMC
 include("samplers/smc_klmc.jl")
 export SMCKLMC
 
-abstract type AbstractControlledSMC <: AbstractSMC end
+# abstract type AbstractControlledSMC <: AbstractSMC end
 
 include("twist.jl")
 include("adp.jl")
@@ -66,7 +68,7 @@ export optimize_policy
 include("samplers/csmc_ula.jl")
 export CSMCULA
 
-include("samplers/csmc_klmc.jl")
-export CSMCKLMC
+# include("samplers/csmc_klmc.jl")
+# export CSMCKLMC
 
 end

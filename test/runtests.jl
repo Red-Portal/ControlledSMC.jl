@@ -9,6 +9,7 @@ using PosteriorDB
 using Random
 using ReverseDiff
 using Test
+using PDMats
 
 using ControlledSMC
 using ControlledSMC: *, +
@@ -27,7 +28,7 @@ function LogDensityProblems.logdensity(prob::Dist, x)
     return logpdf(prob.dist, x)
 end
 
-include("linalg.jl")
-include("bivariatenormal.jl")
+include("batchmvnormal.jl")
+#include("linalg.jl")
 include("interface.jl")
-include("unbiasedness.jl")
+#include("unbiasedness.jl")

@@ -34,7 +34,7 @@ end
         ),
         ("SMCULA + ForwardKernel", SMCULA(0.5, 0.5, ForwardKernel(), Eye(d), path)),
         ("SMCUHMC", SMCUHMC(1.0, 0.5, Eye(d))),
-        ("SMCKLMC", SMCKLMC(5.0, 10.0)),
+        ("SMCKLMC", SMCKLMC(d, 5.0, 10.0)),
     ]
         pvalue = run_unbiasedness_test(sampler, path, n_particles, n_test_samples, Z_true)
 

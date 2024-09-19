@@ -1,52 +1,12 @@
 
-struct BlockHermitian2by2{B}
-    Σ11::B
-    Σ21::B
-    Σ22::B
-end
 
-struct Block2by2{B}
-    A11::B
-    A21::B
-    A12::B
-    A22::B
-end
-
-struct BlockDiagonal2by2{B}
-    D1::B
-    D2::B
-end
-
-struct BlockCholesky2by2{B}
-    L11::B
-    L21::B
-    L22::B
-end
-
-function LinearAlgebra.cholesky(Σ::BlockHermitian2by2)
-    Σ11, Σ12, Σ22  = Σ.Σ11, Σ.Σ21, Σ.Σ22
-
-    L11 = sqrt(Σ11)
-    L12 = Σ12 / L11
-    L22 = sqrt(Σ11 * Σ22 - Σ12 * Σ12) / L11
-    return BlockCholesky2by2{typeof(L11)}(L11, L12, L22)
-end
-
-function LinearAlgebra.inv(L::BlockCholesky2by2)
-    L11, L21, L22  = L.L11, L.L21, L.L22
-
-    Linv11 = inv(L11)
-    Linv12 = -L21 / L11 / L22
-    Linv22 = inv(L22)
-    return BlockCholesky2by2{typeof(L11)}(Linv11, Linv12, Linv22)
-end
 
 function Base.sqrt(D::BlockDiagonal2by2{<:Diagonal})
     BlockDiagonal2by2(sqrt(D.D1), sqrt(D.D2))
 end
 
-function LinearAlgebra.:*(D::BlockDiagonal2by2{<:Diagonal}, L::BlockCholesky2by2{<:Diagonal})
-    BlockCholesky2by2(
+function LinearAlgebra.:*(D::BlockDiagonal2by2{<:Diagonal}, L::BlockLowerTriangular2by2{<:Diagonal})
+    BlockLowerTriangular2by2(
         D.D1*L.L11,
         D.D2*L.L21,
         D.D2*L.L22,
@@ -54,7 +14,7 @@ function LinearAlgebra.:*(D::BlockDiagonal2by2{<:Diagonal}, L::BlockCholesky2by2
 end
 
 function LinearAlgebra.:*(D::BlockDiagonal2by2{<:Diagonal}, Σ::BlockHermitian2by2{<:Diagonal})
-    Block2by2(
+    BlockMatrix2by2(
         D.D1*Σ.Σ11,
         D.D2*Σ.Σ21,
         D.D1*Σ.Σ21,
@@ -62,14 +22,14 @@ function LinearAlgebra.:*(D::BlockDiagonal2by2{<:Diagonal}, Σ::BlockHermitian2b
     )
 end
 
-function LinearAlgebra.:*(L::BlockCholesky2by2{<:Diagonal}, A::Block2by2{<:Diagonal})
+function LinearAlgebra.:*(L::BlockLowerTriangular2by2{<:Diagonal}, A::BlockMatrix2by2{<:Diagonal})
     # [ L11   0 ] [ A11 A12 ]
     # [ L21 L22 ] [ A21 A22 ]
     # = [           L11*A11             L11*A12 ]
     #   [ L21*A11 + L22*A21   L21*A12 + L22*A22 ]
     (; L11, L21, L22)      = L
     (; A11, A12, A21, A22) = A
-    Block2by2(
+    BlockMatrix2by2(
         L11*A11,
         L21*A11 + L22*A21,
         L11*A12,
@@ -106,12 +66,12 @@ function LinearAlgebra.:-(
     )
 end
 
-function LinearAlgebra.:*(L::BlockCholesky2by2{<:Diagonal}, Σ::BlockHermitian2by2{<:Diagonal})
+function LinearAlgebra.:*(L::BlockLowerTriangular2by2{<:Diagonal}, Σ::BlockHermitian2by2{<:Diagonal})
     # [ L11   0 ] [ Σ11 Σ21 ]
     # [ L21 L22 ] [ Σ21 Σ22 ]
     # = [           L11*Σ11             L11*Σ21 ]
     #   [ L21*Σ11 + L22*Σ21   L21*Σ21 + L22*Σ22 ]
-    Block2by2(
+    BlockMatrix2by2(
         L.L11*Σ.Σ11,
         L.L11*Σ.Σ21,
         L.L21*Σ.Σ11 + L.L22*Σ.Σ21,
@@ -120,7 +80,7 @@ function LinearAlgebra.:*(L::BlockCholesky2by2{<:Diagonal}, Σ::BlockHermitian2b
 end
 
 function transpose_square(
-    A::Block2by2{<:Diagonal},
+    A::BlockMatrix2by2{<:Diagonal},
 )
     # [A11 A21] × [A11 A12]
     # [A12 A22]   [A21 A22]
@@ -137,19 +97,19 @@ function transpose_square(
 end
 
 # function LinearAlgebra.:*(α::Real, Σ::BlockHermitian2by2{<:Diagonal})
-#     BlockCholesky2by2(α*Σ.Σ11, α*Σ.Σ21, α*Σ.Σ22)
+#     BlockLowerTriangular2by2(α*Σ.Σ11, α*Σ.Σ21, α*Σ.Σ22)
 # end
 
-# function LinearAlgebra.:+(L1::BlockCholesky2by2{<:Diagonal}, L2::BlockCholesky2by2{<:Diagonal})
-#     BlockCholesky2by2(
+# function LinearAlgebra.:+(L1::BlockLowerTriangular2by2{<:Diagonal}, L2::BlockLowerTriangular2by2{<:Diagonal})
+#     BlockLowerTriangular2by2(
 #         L1.L11 + L2.L11,
 #         L1.L21 + L2.L21,
 #         L1.L22 + L2.L22,
 #     )
 # end
 
-# function LinearAlgebra.:+(D::BlockDiagonal2by2{<:Diagonal}, L::BlockCholesky2by2{<:Diagonal})
-#     BlockCholesky2by2(
+# function LinearAlgebra.:+(D::BlockDiagonal2by2{<:Diagonal}, L::BlockLowerTriangular2by2{<:Diagonal})
+#     BlockLowerTriangular2by2(
 #         D.D1 + L.L11,
 #         L.L21,
 #         D.D2 + L.L22,
@@ -158,7 +118,7 @@ end
 
 
 # function transpose_square(
-#     L::BlockCholesky2by2{<:Diagonal},
+#     L::BlockLowerTriangular2by2{<:Diagonal},
 # )
 #     # [U11 U12] × [L11   0]
 #     # [  0 U22]   [L21 L22]
@@ -170,5 +130,5 @@ end
 #     #   [      L22×L21    L22^2]
 
 #     (; L11, L21, L22) = L
-#     BlockCholesky2by2(L11*L11 + L21*L21, L21*L22, L22*L22)
+#     BlockLowerTriangular2by2(L11*L11 + L21*L21, L21*L22, L22*L22)
 # end

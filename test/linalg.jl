@@ -31,34 +31,21 @@
         Σ22      = 2.0 * Diagonal(1:d)
         Σ_struct = ControlledSMC.BlockHermitian2by2(Σ11, Σ21, Σ22)
 
-        Σ                           = zeros(2 * d, 2 * d)
-        Σ[1:d, 1:d]                 = Σ11
-        Σ[1:d, (d + 1):end]         = Σ21
-        Σ[(d + 1):end, 1:d]         = Σ21
-        Σ[(d + 1):end, (d + 1):end] = Σ22
+        Σ = Matrix(Σ_struct)
 
         L_true    = cholesky(Σ).L
         Linv_true = inv(L_true)
 
         @testset "cholesky" begin
-            L_struct                    = cholesky(Σ_struct)
-            L                           = zeros(2 * d, 2 * d)
-            L[1:d, 1:d]                 = L_struct.L11
-            L[(d + 1):end, 1:d]         = L_struct.L21
-            L[(d + 1):end, (d + 1):end] = L_struct.L22
-
+            L_struct = cholesky(Σ_struct)
+            L        = Matrix(L_struct)
             @test L ≈ L_true rtol = 0.01
         end
 
         @testset "cholesky inv" begin
             L_struct    = cholesky(Σ_struct)
             Linv_struct = inv(L_struct)
-
-            Linv                           = zeros(2 * d, 2 * d)
-            Linv[1:d, 1:d]                 = Linv_struct.L11
-            Linv[(d + 1):end, 1:d]         = Linv_struct.L21
-            Linv[(d + 1):end, (d + 1):end] = Linv_struct.L22
-
+            Linv        = Matrix(Linv)
             @test Linv ≈ Linv_true rtol = 0.01
         end
 
