@@ -24,7 +24,7 @@ function twist_mvnormal_logmarginal(
     return ((-ℓdetΣ + ℓdetK) .+ (PDMats.quad(K, z) - PDMats.invquad(Σ, μ))) / 2 .- c
 end
 
-function klmc_gain_matrix(A::BlockDiagonal2by2, Σ::BlockPDMat2by2)
+function control_cov(A::BlockDiagonal2by2, Σ::BlockPDMat2by2)
     (; Linv)  = Σ
     Σinv      = transpose_square(Linv)
     Kinv      = 2 * A + Σinv
@@ -45,7 +45,7 @@ function twist_mvnormal_rand(
     n = size(μs.x1, 2)
     b = BatchVectors2(repeat(b[1:d], 1, n), repeat(b[d+1:2*d], 1, n))
     A = BlockDiagonal2by2(Diagonal(a[1:d]), Diagonal(a[d+1:2*d]))
-    K = klmc_gain_matrix(A, Σ)
+    K = control_cov(A, Σ)
 
     μs_twist = K.Σ * ((Σ \ μs) - b)
     z_st     = rand(rng, BatchMvNormal(μs_twist, K))
@@ -62,7 +62,7 @@ function twist_mvnormal_logmarginal(
     n     = size(μs.x1, 2)
     A     = BlockDiagonal2by2(Diagonal(a[1:d]), Diagonal(a[d+1:2*d]))
     b     = BatchVectors2(repeat(b[1:d], 1, n), repeat(b[d+1:2*d], 1, n))
-    K     = klmc_gain_matrix(A, Σ)
+    K     = control_cov(A, Σ)
     ℓdetΣ = logdet(Σ)
     ℓdetK = logdet(K)
     z     = (Σ \ μs) - b

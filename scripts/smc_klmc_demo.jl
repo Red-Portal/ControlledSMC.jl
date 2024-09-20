@@ -42,8 +42,7 @@ function main()
 
     display(hline([0.0]; label="True logZ"))
 
-    stepsize = 0.5
-
+    stepsize = 4.0/5
     
 
     #sampler = SMCKLMC(0.5, 10.0)
@@ -51,7 +50,7 @@ function main()
     #return
 
     n_particles = 256
-    dampings = [5.0, 10.0, 50.0]
+    dampings = [5.0, 10.0, 20.0]
 
     for (idx, damping) in enumerate(dampings)
         sampler = SMCKLMC(d, stepsize*damping, damping)

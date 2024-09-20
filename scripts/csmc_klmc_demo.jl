@@ -45,10 +45,10 @@ function main()
 
     display(hline([0.0]; label="True logZ"))
 
-    stepsize    = 0.5
-    damping     = 10.0
+    stepsize    = 0.1
+    damping     = 100.0
     n_particles = 512
-    n_episodes  = 0
+    n_episodes  = 10
 
     # smc  = SMCKLMC(d, stepsize*damping, damping)
     # csmc = CSMCKLMC(smc, path)

@@ -13,17 +13,20 @@ function CSMCKLMC(smc::SMCKLMC, path::AbstractPath)
     return CSMCKLMC{typeof(smc),typeof(path),typeof(policy)}(smc, path, policy)
 end
 
-# function twist_double_mvnormal_logmarginal(sampler::CSMCKLMC, t::Int, ψ_first, ψ_second, state)
-#     (; smc, path) = sampler
-#     (; stepsize, damping) = smc
-
-#     (; a, b)  = ψ_first
-#     (; μ_fwd) = state
-#     K         = inv(Diagonal(2*a) + inv(PDMats.PDMat(Σ)))
-#     μ_twisted = K*(Σ_fwd\μ_fwd_tp1 .- b_prev)
-#     Σ_twisted = K
-#     return twist_bivariate_mvnormal_logmarginal(ψ_second, μ_twisted, Σ_twisted)
-# end
+function twist_double_mvnormal_logmarginal(sampler::CSMCKLMC, t::Int, ψ_first, ψ_second, state)
+    (; smc,)       = sampler
+    (; sigma_klmc) = smc
+    (; a, b)       = ψ_first
+    (; μ_klmc)     = state
+    Σ       = sigma_klmc
+    d, n    = size(μ_klmc.x1, 1), size(μ_klmc.x1, 2)
+    A       = BlockDiagonal2by2(Diagonal(a[1:d]), Diagonal(a[d+1:2*d]))
+    b       = BatchVectors2(repeat(b[1:d], 1, n), repeat(b[d+1:2*d], 1, n))
+    K       = control_cov(A, sigma_klmc)
+    μ_twist = K.Σ*(Σ\μ_klmc - b)
+    Σ_twist = K
+    return twist_mvnormal_logmarginal(ψ_second, μ_twist, Σ_twist)
+end
 
 function twist_kernel_logmarginal(csmc::CSMCKLMC, twist, πt, ::Int, ztm1::AbstractMatrix)
     (; stepsize, damping, sigma_klmc) = csmc.smc

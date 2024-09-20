@@ -63,7 +63,7 @@
 
         K_true = inv(inv(Σ) + 2*A)
 
-        K_st   = ControlledSMC.klmc_gain_matrix(A_st, Σ_pd)
+        K_st   = ControlledSMC.control_cov(A_st, Σ_pd)
         K      = Matrix(K_st.Σ)
         @test K ≈ K_true rtol=0.001
     end
