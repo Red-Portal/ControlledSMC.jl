@@ -26,6 +26,7 @@ abstract type AbstractBackwardKernel end
 include("linalg/types.jl")
 include("linalg/blas1.jl")
 include("linalg/blas2.jl")
+include("linalg/blas3.jl")
 include("linalg/pdmat.jl")
 
 include("weighing.jl")
@@ -68,7 +69,7 @@ export optimize_policy
 include("samplers/csmc_ula.jl")
 export CSMCULA
 
-# include("samplers/csmc_klmc.jl")
-# export CSMCKLMC
+include("samplers/csmc_klmc.jl")
+export CSMCKLMC
 
 end
