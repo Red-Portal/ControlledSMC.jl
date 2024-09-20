@@ -1,108 +1,70 @@
 
 @testset "Linear Algebra Routines" begin
-    @testset "scalar entries" begin
-        σ11, σ21, σ22 = 0.5, 0.2, 0.7
-        Σ         = [σ11  σ21; σ21 σ22]
-        Σ_struct  = ControlledSMC.BlockHermitian2by2(σ11, σ21, σ22)
-        L_true    = cholesky(Σ).L
-        Linv_true = inv(L_true)
+    d = 3
 
-        @testset "cholesky" begin
-            L_struct = cholesky(Σ_struct)
-            L        = [L_struct.L11 0; L_struct.L21 L_struct.L22]
+    Σ11  = 1.0 * Diagonal(1:d)
+    Σ21  = 0.1 * Diagonal(1:d)
+    Σ22  = 2.0 * Diagonal(1:d)
+    Σ_st = ControlledSMC.BlockHermitian2by2(Σ11, Σ21, Σ22)
+    Σ_pd = PDMats.PDMat(Σ_st)
+    Σ    = Matrix(Σ_st)
 
-            @test L ≈ L_true rtol = 0.01
-        end
+    L_true    = cholesky(Σ).L
+    Linv_true = inv(L_true)
 
-        @testset "cholesky inv" begin
-            L_struct    = cholesky(Σ_struct)
-            Linv_struct = inv(L_struct)
-            Linv        = [Linv_struct.L11 0; Linv_struct.L21 Linv_struct.L22]
-
-            @test Linv ≈ Linv_true rtol = 0.01
-        end
+    @testset "cholesky" begin
+        L_st = cholesky(Σ_st)
+        L    = Matrix(L_st)
+        @test L ≈ L_true rtol = 0.01
     end
 
-    @testset "diagonal matrix entries" begin
-        d = 3
-
-        Σ11      = 1.0 * Diagonal(1:d)
-        Σ21      = 0.1 * Diagonal(1:d)
-        Σ22      = 2.0 * Diagonal(1:d)
-        Σ_struct = ControlledSMC.BlockHermitian2by2(Σ11, Σ21, Σ22)
-
-        Σ = Matrix(Σ_struct)
-
-        L_true    = cholesky(Σ).L
-        Linv_true = inv(L_true)
-
-        @testset "cholesky" begin
-            L_struct = cholesky(Σ_struct)
-            L        = Matrix(L_struct)
-            @test L ≈ L_true rtol = 0.01
-        end
-
-        @testset "cholesky inv" begin
-            L_struct    = cholesky(Σ_struct)
-            Linv_struct = inv(L_struct)
-            Linv        = Matrix(Linv)
-            @test Linv ≈ Linv_true rtol = 0.01
-        end
-
+    @testset "cholesky inv" begin
+        L_st    = cholesky(Σ_st)
+        Linv_st = inv(L_st)
+        Linv    = Matrix(Linv_st)
+        @test Linv ≈ Linv_true rtol = 0.01
     end
 
-    @testset "algebraic operations" begin
-        d = 3
+    @testset "logdet" begin
+        @test logdet(Σ) ≈ logdet(Σ_pd) rtol = 0.001
+    end
 
-        Σ11      = 1.0 * Diagonal(1:d)
-        Σ21      = 0.1 * Diagonal(1:d)
-        Σ22      = 2.0 * Diagonal(1:d)
-        Σ_struct = ControlledSMC.BlockHermitian2by2(Σ11, Σ21, Σ22)
+    @testset "logdet" begin
+        @test logdet(Σ) ≈ logdet(Σ_pd) rtol = 0.001
+    end
 
-        A1       = 0.2*Diagonal(d:-1:1)
-        A2       = 0.3*Diagonal(1:d)
-        A_struct = ControlledSMC.BlockDiagonal2by2(A1, A2)
+    n    = 4
+    x1   = randn(d, n)
+    x2   = randn(d, n)
+    x_st = ControlledSMC.BatchVectors2(x1, x2)
+    x    = Matrix(x_st)
 
-        Σ                           = zeros(2 * d, 2 * d)
-        Σ[1:d, 1:d]                 = Σ11
-        Σ[1:d, (d + 1):end]         = Σ21
-        Σ[(d + 1):end, 1:d]         = Σ21
-        Σ[(d + 1):end, (d + 1):end] = Σ22
+    @testset "system solve" begin
+        Σinvx_true = Σ \ x
+        Σinvx_st   = Σ_pd \ x_st
+        Σinvx      = Matrix(Σinvx_st)
 
-        A                  = Diagonal(zeros(2 * d))
-        A[1:d,1:d]         = A1
-        A[d+1:end,d+1:end] = A2
+        @test Σinvx_true ≈ Σinvx rtol=0.001
+    end
 
-        Σ_post_true = inv(inv(Σ) + 2*A)
-        
+    @testset "quad" begin
+        @test quad(Σ, x) ≈ quad(Σ_pd, x_st)
+    end
 
-        L_true    = cholesky(0.5*I + sqrt(A)*Σ*sqrt(A)).L
-        Linv_true = inv(L_true)
-        C_sqrt_tr = Linv_true*sqrt(A)*Σ
-        C         = C_sqrt_tr'*C_sqrt_tr
+    @testset "invquad" begin
+        @test invquad(Σ, x) ≈ invquad(Σ_pd, x_st)
+    end
 
-        # (Σ^{-1} + 2A)^{-1} = Σ - Σ √A (1/2 I + √A Σ √A)^{-1} √A Σ 
-        # B ≜ 1/2 I + √A Σ √A
-        # C ≜ L_{B}^{-1} √A Σ 
-        half_eye    = ControlledSMC.BlockDiagonal2by2(
-            Diagonal(fill(0.5, d)), Diagonal(fill(0.5, d))
-        )
-        A_sqrt        = sqrt(A_struct)
-        AsqrtΣ        = A_sqrt*Σ_struct
-        AsqrtΣAsqrt   = ControlledSMC.quad(Σ_struct, A_sqrt)
-        B             = half_eye + AsqrtΣAsqrt
-        B_chol        = cholesky(B)
-        B_cholinv     = inv(B_chol)
-        C_sqrt_tr     = B_cholinv*AsqrtΣ
+    @testset "posterior covariance" begin
+        A1   = 0.2*Diagonal(d:-1:1)
+        A2   = 0.3*Diagonal(1:d)
+        A_st = ControlledSMC.BlockDiagonal2by2(A1, A2)
+        A    = Matrix(A_st)
 
-        Σ_post_struct = Σ_struct - ControlledSMC.transpose_square(C_sqrt_tr)
+        K_true = inv(inv(Σ) + 2*A)
 
-        Σ_post = zeros(2 * d, 2 * d)
-        Σ_post[1:d, 1:d]                 = Σ_post_struct.Σ11
-        Σ_post[1:d, (d + 1):end]         = Σ_post_struct.Σ21
-        Σ_post[(d + 1):end, 1:d]         = Σ_post_struct.Σ21
-        Σ_post[(d + 1):end, (d + 1):end] = Σ_post_struct.Σ22
-
-        @test Σ_post ≈ Σ_post_true rtol = 0.01
+        K_st   = ControlledSMC.klmc_gain_matrix(A_st, Σ_pd)
+        K      = Matrix(K_st.Σ)
+        @test K ≈ K_true rtol=0.001
     end
 end

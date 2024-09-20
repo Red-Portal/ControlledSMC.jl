@@ -29,6 +29,6 @@ function LogDensityProblems.logdensity(prob::Dist, x)
 end
 
 include("batchmvnormal.jl")
-#include("linalg.jl")
+include("linalg.jl")
 include("interface.jl")
 #include("unbiasedness.jl")

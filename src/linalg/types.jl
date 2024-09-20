@@ -7,6 +7,15 @@ struct BatchVectors2{
     x2::B2
 end
 
+function LinearAlgebra.Matrix(x::BatchVectors2)
+    (; x1, x2) = x
+    d, n       = size(x1, 1), size(x1, 2)
+    x                 = zeros(2*d, n)
+    x[1:d, :]         = x1
+    x[(d + 1):end, :] = x2
+    x
+end
+
 struct BlockHermitian2by2{B}
     Σ11::B
     Σ21::B
@@ -60,11 +69,20 @@ struct BlockDiagonal2by2{B}
     D2::B
 end
 
+function LinearAlgebra.Matrix(D_st::BlockDiagonal2by2)
+    d = size(D_st.D1, 1)
+    L                           = zeros(2 * d, 2 * d)
+    L[1:d, 1:d]                 = D_st.D1
+    L[(d + 1):end, (d + 1):end] = D_st.D2
+    L
+end
+
 Base.show(
     io::IO,
     Σ::Union{
         <:BlockHermitian2by2,
         <:BlockMatrix2by2,
         <:BlockLowerTriangular2by2,
+        <:BlockDiagonal2by2,
     }
 ) = Base.show(io, Matrix(Σ))

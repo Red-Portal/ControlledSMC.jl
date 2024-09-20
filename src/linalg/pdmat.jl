@@ -39,15 +39,24 @@ end
 function PDMats.quad(Σ::BlockPDMat2by2, x::BatchVectors2)
     (; L11, L21, L22)  = Σ.L
     (; x1, x2)         = x 
-    r21 = sum(abs2, L11*x1, dims=1)[1,:]
-    r22 = sum(abs2, L12*x1 + L12*x2, dims=1)[1,:]
+    r21 = sum(abs2, L11*x1 + L21*x2, dims=1)[1,:]
+    r22 = sum(abs2, L22*x2, dims=1)[1,:]
     r21 + r22
 end
 
 function PDMats.invquad(Σ::BlockPDMat2by2, x::BatchVectors2)
-    (; L11, L21, L22)  = Σ.Linv
-    (; x1, x2)         = x 
+    (; L11, L21, L22) = Σ.Linv
+    (; x1, x2)        = x 
     r21 = sum(abs2, L11*x1, dims=1)[1,:]
     r22 = sum(abs2, L21*x1 + L22*x2, dims=1)[1,:]
     r21 + r22
+end
+
+function LinearAlgebra.:\(Σ::BlockPDMat2by2, x::BatchVectors2)
+    (; L11, L21, L22)  = Σ.Linv
+    Linvx = Σ.Linv * x
+    BatchVectors2(
+        L11*Linvx.x1 + L21*Linvx.x2,
+        L22*Linvx.x2
+    )
 end
