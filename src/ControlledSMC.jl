@@ -62,8 +62,8 @@ export SMCKLMC
 
 abstract type AbstractControlledSMC <: AbstractSMC end
 
-include("twist.jl")
-include("adp.jl")
+include("control/twist.jl")
+include("control/adp.jl")
 export optimize_policy
 
 include("samplers/csmc_ula.jl")
