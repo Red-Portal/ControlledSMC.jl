@@ -52,7 +52,7 @@ function rand_initial_with_potential(
     ℓG0  = zero(eltype(x))
     ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ, Σ)
     ℓψ0  = twist_logdensity(ψ0, x)
-    πtp1 = step(path, 2, x, x[1, :])
+    πtp1 = get_target(path, 2)
     ℓMψ  = twist_kernel_logmarginal(sampler, policy[2], πtp1, 2, x)
     ℓGψ  = @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
 
@@ -76,7 +76,7 @@ function mutate_with_potential(
     T   = length(path)
     ℓGψ = if t < T
         ψtp1 = policy[t + 1]
-        πtp1 = step(path, t + 1, xt, ℓG)
+        πtp1 = get_target(path, t + 1)
         ℓMψ  = twist_kernel_logmarginal(sampler, ψtp1, πtp1, t + 1, xt)
         @. ℓG + ℓMψ - ℓψ
     elseif t == T

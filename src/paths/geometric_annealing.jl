@@ -29,7 +29,7 @@ end
 
 Base.length(path::GeometricAnnealingPath) = length(path.schedule)
 
-function step(path::GeometricAnnealingPath, t::Int, x::AbstractMatrix, w::AbstractVector)
+function get_target(path::GeometricAnnealingPath, t::Int)
     (; schedule, proposal, problem, adtype) = path
     return AnnealedDensityProblem(
         GeometricAnnealing(schedule[t]), proposal, problem, adtype
