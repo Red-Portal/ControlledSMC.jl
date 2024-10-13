@@ -12,7 +12,6 @@ function update_schedule(
             ℓG2 - 2*ℓG1
         end
     end
-    println(divergences)
     local_barrier        = sqrt.(divergences)
     local_barrier_cum    = cumsum(local_barrier)
     global_barrier       = last(local_barrier_cum)
