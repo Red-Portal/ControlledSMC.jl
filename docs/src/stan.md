@@ -12,13 +12,13 @@ using PosteriorDB
 using ProgressMeter
 using Random, Random123
 
-function experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
+function experiment_smcuhmc(rng, path, n_steps, d, n_particles, n_reps, ylims)
     stepsizes = 10.0.^range(-4, -1; length=8)
     dampings  = [0.05, 0.1, 0.15, 0.2]
 
     for α in dampings
         ℓZs = @showprogress map(stepsizes) do ϵ
-            sampler = SMCUHMC(ϵ, α, Eye(d))
+            sampler = SMCUHMC(ϵ, α, n_steps, Eye(d))
             mean(1:n_reps) do k
                 try 
                     rng_local = deepcopy(rng)
