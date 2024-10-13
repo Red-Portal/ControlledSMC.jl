@@ -48,14 +48,14 @@ function main()
     stepsize    = 0.1
     damping     = 100.0
     n_particles = 512
-    n_episodes  = 10
+    n_episodes  = 3
 
     # smc  = SMCKLMC(d, stepsize*damping, damping)
     # csmc = CSMCKLMC(smc, path)
     # _, _, states, stats = ControlledSMC.sample(rng, csmc, path, n_particles, 0.5; show_progress=false)
     # return stats
 
-    smc = SMCKLMC(d, stepsize*damping, damping)
+    smc = SMCKLMC(d, stepsize*damping, damping, n_iters)
     res = @showprogress map(1:32) do _
         _, _, _, stats = ControlledSMC.sample(
             rng, smc, path, n_particles, 0.5; show_progress=false

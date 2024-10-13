@@ -1,8 +1,16 @@
 
-struct SMCUHMC{Stepsize<:Real,Mass<:AbstractMatrix} <: AbstractSMC
-    stepsize    :: Stepsize
-    damping     :: Stepsize
+struct SMCUHMC{Stepsizes<:AbstractVector,Dampings<:AbstractVector,Mass<:AbstractMatrix} <: AbstractSMC
+    stepsizes   :: Stepsizes
+    dampings    :: Stepsizes
     mass_matrix :: Mass
+end
+
+function SMCUHMC(stepsize::Real, damping::Real, n_steps::Int, mass_matrix::AbstractMatrix)
+    stepsizes = Fill(stepsize, n_steps)
+    dampings  = Fill(damping, n_steps)
+    SMCUHMC{typeof(stepsizes), typeof(dampings), typeof(mass_matrix)}(
+        stepsizes, dampings,  mass_matrix
+    )
 end
 
 function rand_initial_with_potential(
@@ -19,10 +27,10 @@ function rand_initial_with_potential(
 end
 
 function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCUHMC, ::Int, πt, πtm1, ztm1::AbstractMatrix
+    rng::Random.AbstractRNG, sampler::SMCUHMC, t::Int, πt, πtm1, ztm1::AbstractMatrix
 )
-    (; stepsize, damping, mass_matrix) = sampler
-    ϵ, α, M = stepsize, damping, mass_matrix
+    (; stepsizes, dampings, mass_matrix) = sampler
+    ϵ, α, M = stepsizes[t], dampings[t], mass_matrix
     sqrt1mα = sqrt(1 - α)
 
     d          = size(ztm1, 1) ÷ 2

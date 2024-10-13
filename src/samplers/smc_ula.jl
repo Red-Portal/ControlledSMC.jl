@@ -1,27 +1,29 @@
 
 struct SMCULA{
-    Stepsize<:Real,
-    Precond<:AbstractMatrix,
+    Stepsizes<:AbstractVector,
     Backward<:AbstractBackwardKernel,
-    Path<:GeometricAnnealingPath,
+    Precond<:AbstractMatrix,
 } <: AbstractSMC
-    stepsize_proposal :: Stepsize
-    stepsize_problem  :: Stepsize
-    backward          :: Backward
-    precond           :: Precond
-    path              :: Path
+    stepsizes :: Stepsizes
+    backward  :: Backward
+    precond   :: Precond
+end
+
+function SMCULA(stepsize::Real, n_steps::Int, backward::AbstractBackwardKernel, precond::AbstractMatrix)
+    stepsizes = Fill(stepsize, n_steps)
+    return SMCULA{typeof(stepsizes), typeof(backward), typeof(precond)}(
+        stepsizes, backward, precond
+    )
 end
 
 function mutate_with_potential(
     rng::Random.AbstractRNG, sampler::SMCULA, t::Int, πt, πtm1, xtm1::AbstractMatrix
 )
-    (; stepsize_proposal, stepsize_problem, precond, path) = sampler
-    h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
-    ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
-
-    q  = gradient_flow_euler(πt, xtm1, ht, Γ)
-    xt = q + sqrt(2 * ht) * unwhiten(Γ, randn(rng, eltype(q), size(q)))
-    ℓG = potential(sampler, t, πt, πtm1, xt, xtm1)
+    (; stepsizes, precond) = sampler
+    ht, Γ  = stepsizes[t], precond
+    q      = gradient_flow_euler(πt, xtm1, ht, Γ)
+    xt     = q + sqrt(2 * ht) * unwhiten(Γ, randn(rng, eltype(q), size(q)))
+    ℓG     = potential(sampler, t, πt, πtm1, xt, xtm1)
     return xt, ℓG, NamedTuple()
 end
 
@@ -47,19 +49,16 @@ function potential_with_backward(
     xt::AbstractMatrix,
     xtm1::AbstractMatrix,
 )
-    (; stepsize_proposal, stepsize_problem, precond, path) = sampler
-    h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
-    ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
-    htm1 = anneal(GeometricAnnealing(path.schedule[t - 1]), h0, hT)
-
-    ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
-    ℓπt_xt     = LogDensityProblems.logdensity(πt, xt)
-    q_fwd      = gradient_flow_euler(πt, xtm1, ht, Γ)
-    q_bwd      = gradient_flow_euler(πtm1, xt, htm1, Γ)
-    K          = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
-    L          = MvNormal.(eachcol(q_bwd), Ref(2 * htm1 * Γ))
-    ℓk         = logpdf.(K, eachcol(xt))
-    ℓl         = logpdf.(L, eachcol(xtm1))
+    (; stepsizes, precond) = sampler
+    ht, htm1, Γ = stepsizes[t], stepsizes[t - 1], precond
+    ℓπtm1_xtm1  = LogDensityProblems.logdensity(πtm1, xtm1)
+    ℓπt_xt      = LogDensityProblems.logdensity(πt, xt)
+    q_fwd       = gradient_flow_euler(πt, xtm1, ht, Γ)
+    q_bwd       = gradient_flow_euler(πtm1, xt, htm1, Γ)
+    K           = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
+    L           = MvNormal.(eachcol(q_bwd), Ref(2 * htm1 * Γ))
+    ℓk          = logpdf.(K, eachcol(xt))
+    ℓl          = logpdf.(L, eachcol(xtm1))
     return ℓπt_xt + ℓl - ℓπtm1_xtm1 - ℓk
 end
 
@@ -72,10 +71,8 @@ function potential_with_backward(
     xt::AbstractMatrix,
     xtm1::AbstractMatrix,
 )
-    (; stepsize_proposal, stepsize_problem, precond, path) = sampler
-    h0, hT, Γ = stepsize_proposal, stepsize_problem, precond
-    ht = anneal(GeometricAnnealing(path.schedule[t]), h0, hT)
-
+    (; stepsizes, precond) = sampler
+    ht, Γ      = stepsizes[t], precond
     ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
     ℓπt_xt     = LogDensityProblems.logdensity(πt, xt)
     q_fwd      = gradient_flow_euler(πt, xtm1, ht, Γ)

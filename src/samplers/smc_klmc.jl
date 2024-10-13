@@ -1,14 +1,22 @@
 
-struct SMCKLMC{Stepsize<:Real,Sigma<:BlockPDMat2by2} <: AbstractSMC
-    stepsize   :: Stepsize
-    damping    :: Stepsize
+struct SMCKLMC{
+    Stepsizes<:AbstractVector,
+    Dampings<:AbstractVector,
+    Sigma<:BlockPDMat2by2,
+} <: AbstractSMC
+    stepsizes  :: Stepsizes
+    dampings   :: Dampings
     sigma_klmc :: Sigma
 end
 
-function SMCKLMC(n_dims::Int, stepsize::Real, damping::Real)
-    Σ    = klmc_cov(n_dims, stepsize, damping)
-    Σ_pd = PDMats.PDMat(Σ)
-    return SMCKLMC(stepsize, damping, Σ_pd)
+function SMCKLMC(n_dims::Int, stepsize::Real, damping::Real, n_steps::Int)
+    Σ         = klmc_cov(n_dims, stepsize, damping)
+    Σ_pd      = PDMats.PDMat(Σ)
+    stepsizes = Fill(stepsize, n_steps)
+    dampings  = Fill(damping, n_steps)
+    return SMCKLMC{typeof(stepsizes), typeof(dampings), typeof(Σ_pd)}(
+        stepsizes, dampings, Σ_pd,
+    )
 end
 
 function rand_initial_with_potential(
@@ -23,10 +31,10 @@ function rand_initial_with_potential(
 end
 
 function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCKLMC, ::Int, πt, πtm1, ztm1::AbstractMatrix
+    rng::Random.AbstractRNG, sampler::SMCKLMC, t::Int, πt, πtm1, ztm1::AbstractMatrix
 )
-    (; stepsize, damping, sigma_klmc) = sampler
-    h, γ, Σ_klmc = stepsize, damping, sigma_klmc
+    (; stepsizes, dampings, sigma_klmc) = sampler
+    h, γ, Σ_klmc = stepsizes[t], dampings[t], sigma_klmc
 
     d          = size(ztm1, 1) ÷ 2
     xtm1, vtm1 = ztm1[1:d, :], ztm1[(d + 1):end, :]

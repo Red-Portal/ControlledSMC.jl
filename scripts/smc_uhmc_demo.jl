@@ -45,15 +45,11 @@ function main()
     stepsize    = 1.0
     mass_matrix = Eye(d)
 
-    #sampler = SMCUHMC(leapfrog_stepsize, diffusion_stepsize, mass_matrix)
-    #xs, _, stats = ControlledSMC.sample(rng, sampler, path, 1024, 1.0; show_progress=true)
-    #return
-
     n_particles = 256
     dampings = [0.9, 0.5, 0.1, 0.01]
 
     for (idx, damping) in enumerate(dampings)
-        sampler = SMCUHMC(stepsize, damping, mass_matrix)
+        sampler = SMCUHMC(stepsize, damping, n_iters, mass_matrix)
 
         res = @showprogress map(1:64) do _
             xs, _, _, stats = ControlledSMC.sample(

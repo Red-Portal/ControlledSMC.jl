@@ -30,11 +30,11 @@ end
     @testset "$(name)" for (name, sampler) in [
         (
             "SMCULA + TimeCorrectForwardKernel",
-            SMCULA(0.5, 0.5, TimeCorrectForwardKernel(), Eye(d), path),
+            SMCULA(0.5, n_iters, TimeCorrectForwardKernel(), Eye(d), path),
         ),
-        ("SMCULA + ForwardKernel", SMCULA(0.5, 0.5, ForwardKernel(), Eye(d), path)),
-        ("SMCUHMC", SMCUHMC(1.0, 0.5, Eye(d))),
-        ("SMCKLMC", SMCKLMC(d, 5.0, 10.0)),
+        ("SMCULA + ForwardKernel", SMCULA(0.5, n_iters, ForwardKernel(), Eye(d))),
+        ("SMCUHMC", SMCUHMC(1.0, 0.5, n_iters, Eye(d))),
+        ("SMCKLMC", SMCKLMC(d, 5.0, 10.0, n_iters)),
     ]
         pvalue = run_unbiasedness_test(sampler, path, n_particles, n_test_samples, Z_true)
 

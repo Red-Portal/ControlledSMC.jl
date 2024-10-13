@@ -44,9 +44,9 @@ function main()
 
     stepsize    = 0.2
     n_particles = 512
-    n_episodes  = 2
+    n_episodes  = 3
 
-    smc  = SMCULA(stepsize, stepsize, TimeCorrectForwardKernel(), Eye(d), path)
+    smc  = SMCULA(stepsize, n_iters, TimeCorrectForwardKernel(), Eye(d))
 
     # csmc = CSMCULA(smc, path)
     # _, _, states, stats = ControlledSMC.sample(rng, csmc, path, n_particles, 0.5; show_progress=true)

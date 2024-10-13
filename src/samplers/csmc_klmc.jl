@@ -31,10 +31,10 @@ function twist_double_mvnormal_logmarginal(
     return twist_mvnormal_logmarginal(ψ_second, μ_twist, Σ_twist)
 end
 
-function twist_kernel_logmarginal(csmc::CSMCKLMC, twist, πt, ::Int, ztm1::AbstractMatrix)
-    (; stepsize, damping, sigma_klmc) = csmc.smc
-    h, γ = stepsize, damping
-    d = size(ztm1, 1) ÷ 2
+function twist_kernel_logmarginal(csmc::CSMCKLMC, twist, πt, t::Int, ztm1::AbstractMatrix)
+    (; stepsizes, dampings, sigma_klmc) = csmc.smc
+    h, γ       = stepsizes[t], dampings[t]
+    d          = size(ztm1, 1) ÷ 2
     xtm1, vtm1 = ztm1[1:d, :], ztm1[(d + 1):end, :]
     μ_klmc = klmc_mean(πt, xtm1, vtm1, h, γ)
     return twist_mvnormal_logmarginal(twist, μ_klmc, sigma_klmc)
@@ -60,7 +60,7 @@ function rand_initial_with_potential(
     ℓG0  = zero(eltype(z))
     ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μz, Σz_pd)
     ℓψ0  = twist_logdensity(ψ0, z)
-    πtp1 = step(path, 2, z, z[1, :])
+    πtp1 = get_target(path, 2)
     ℓMψ  = twist_kernel_logmarginal(sampler, policy[2], πtp1, 2, z)
     ℓGψ  = @. ℓG0 + ℓqψ0 + ℓMψ - ℓψ0
     return z, ℓGψ
@@ -70,9 +70,9 @@ function mutate_with_potential(
     rng::Random.AbstractRNG, sampler::CSMCKLMC, t::Int, πt, πtm1, ztm1::AbstractMatrix
 )
     (; smc, policy, path) = sampler
-    (; stepsize, damping, sigma_klmc) = smc
-    h, γ = stepsize, damping
-    ψ = policy[t]
+    (; stepsizes, dampings, sigma_klmc) = smc
+    h, γ = stepsizes[t], dampings[t]
+    ψ    = policy[t]
 
     d          = size(ztm1, 1) ÷ 2
     xtm1, vtm1 = ztm1[1:d, :], ztm1[(d + 1):end, :]
@@ -99,7 +99,7 @@ function mutate_with_potential(
     T   = length(path)
     ℓGψ = if t < T
         ψtp1 = policy[t + 1]
-        πtp1 = step(path, t + 1, xt, ℓG)
+        πtp1 = get_target(path, t + 1)
         ℓMψ  = twist_kernel_logmarginal(sampler, ψtp1, πtp1, t + 1, zt)
         @. ℓG + ℓMψ - ℓψ
     elseif t == T

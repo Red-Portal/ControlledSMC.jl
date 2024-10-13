@@ -16,12 +16,12 @@
     @testset "$(name)" for (name, sampler) in [
         (
             "SMCULA + TimeCorrectForwardKernel",
-            SMCULA(0.5, 0.5, TimeCorrectForwardKernel(), Eye(d), path),
+            SMCULA(0.5, n_iters, TimeCorrectForwardKernel(), Eye(d)),
         ),
-        ("SMCULA + ForwardKernel", SMCULA(0.5, 0.5, ForwardKernel(), Eye(d), path)),
-        ("SMCULA + DetailedBalance", SMCULA(0.5, 0.5, DetailedBalance(), Eye(d), path)),
-        ("SMCUHMC", SMCUHMC(1.0, 0.5, Eye(d))),
-        ("SMCKLMC", SMCKLMC(d, 5.0, 5.0)),
+        ("SMCULA + ForwardKernel", SMCULA(0.5, n_iters, ForwardKernel(), Eye(d))),
+        ("SMCULA + DetailedBalance", SMCULA(0.5, n_iters, DetailedBalance(), Eye(d))),
+        ("SMCUHMC", SMCUHMC(1.0, 0.5, n_iters, Eye(d))),
+        ("SMCKLMC", SMCKLMC(d, 5.0, 5.0, n_iters)),
     ]
         ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
     end
@@ -47,12 +47,12 @@ end
     @testset "$(name)" for (name, sampler) in [
         (
             "SMCULA + TimeCorrectForwardKernel",
-            SMCULA(1e-4, 1e-4, TimeCorrectForwardKernel(), Eye(d), path),
+            SMCULA(1e-4, n_iters, TimeCorrectForwardKernel(), Eye(d)),
         ),
-        ("SMCULA + ForwardKernel", SMCULA(1e-4, 1e-4, ForwardKernel(), Eye(d), path)),
-        ("SMCULA + DetailedBalance", SMCULA(1e-4, 1e-4, DetailedBalance(), Eye(d), path)),
-        ("SMCUHMC", SMCUHMC(0.01, 0.5, Eye(d))),
-        ("SMCKLMC", SMCKLMC(d, 0.0001, 1000.0)),
+        ("SMCULA + ForwardKernel", SMCULA(1e-4, n_iters, ForwardKernel(), Eye(d))),
+        ("SMCULA + DetailedBalance", SMCULA(1e-4, n_iters, DetailedBalance(), Eye(d))),
+        ("SMCUHMC", SMCUHMC(0.01, 0.5, n_iters, Eye(d))),
+        ("SMCKLMC", SMCKLMC(d, 0.0001, 1000.0, n_iters)),
     ]
         ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
     end
