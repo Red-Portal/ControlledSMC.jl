@@ -42,9 +42,9 @@ function sample(
     push!(states, state)
     push!(stats, stat)
 
-    target_prev = step(path, 1, x, ℓw)
+    target_prev = get_target(path, 1)
     for t in 2:n_iters
-        target               = step(path, t, x, ℓw)
+        target               = get_target(path, t)
         x, ℓG, aux           = mutate_with_potential(rng, sampler, t, target, target_prev, x)
         ℓw                   = ℓw + ℓG
         ℓw_norm, ess         = normalize_weights(ℓw)
