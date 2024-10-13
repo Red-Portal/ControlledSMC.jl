@@ -14,14 +14,14 @@
 
     @testset "cholesky" begin
         L_st = cholesky(Σ_st)
-        L    = Matrix(L_st)
+        L = Matrix(L_st)
         @test L ≈ L_true rtol = 0.01
     end
 
     @testset "cholesky inv" begin
-        L_st    = cholesky(Σ_st)
+        L_st = cholesky(Σ_st)
         Linv_st = inv(L_st)
-        Linv    = Matrix(Linv_st)
+        Linv = Matrix(Linv_st)
         @test Linv ≈ Linv_true rtol = 0.01
     end
 
@@ -44,7 +44,7 @@
         Σinvx_st   = Σ_pd \ x_st
         Σinvx      = Matrix(Σinvx_st)
 
-        @test Σinvx_true ≈ Σinvx rtol=0.001
+        @test Σinvx_true ≈ Σinvx rtol = 0.001
     end
 
     @testset "quad" begin
@@ -56,15 +56,15 @@
     end
 
     @testset "posterior covariance" begin
-        A1   = 0.2*Diagonal(d:-1:1)
-        A2   = 0.3*Diagonal(1:d)
+        A1   = 0.2 * Diagonal(d:-1:1)
+        A2   = 0.3 * Diagonal(1:d)
         A_st = ControlledSMC.BlockDiagonal2by2(A1, A2)
         A    = Matrix(A_st)
 
-        K_true = inv(inv(Σ) + 2*A)
+        K_true = inv(inv(Σ) + 2 * A)
 
-        K_st   = ControlledSMC.control_cov(A_st, Σ_pd)
-        K      = Matrix(K_st.Σ)
-        @test K ≈ K_true rtol=0.001
+        K_st = ControlledSMC.control_cov(A_st, Σ_pd)
+        K = Matrix(K_st.Σ)
+        @test K ≈ K_true rtol = 0.001
     end
 end

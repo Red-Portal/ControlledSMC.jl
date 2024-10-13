@@ -12,13 +12,7 @@ makedocs(;
         edit_link="main",
         assets=String[],
     ),
-    pages=[
-        "Home"        => "index.md",
-        "Stan Models" => "stan.md",
-    ],
+    pages=["Home"        => "index.md", "Stan Models" => "stan.md"],
 )
 
-deploydocs(;
-    repo="github.com/Red-Portal/ControlledSMC.jl",
-    devbranch="main",
-)
+deploydocs(; repo="github.com/Red-Portal/ControlledSMC.jl", devbranch="main")

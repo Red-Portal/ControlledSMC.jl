@@ -1,8 +1,8 @@
 
 struct BlockPDMat2by2{
-    Sigma   <: BlockHermitian2by2,
-    Chol    <: BlockLowerTriangular2by2,
-    CholInv <: BlockLowerTriangular2by2,
+    Sigma<:BlockHermitian2by2,
+    Chol<:BlockLowerTriangular2by2,
+    CholInv<:BlockLowerTriangular2by2,
 }
     Σ    :: Sigma
     L    :: Chol
@@ -10,7 +10,7 @@ struct BlockPDMat2by2{
 end
 
 function LinearAlgebra.cholesky(Σ::BlockHermitian2by2)
-    Σ11, Σ12, Σ22  = Σ.Σ11, Σ.Σ21, Σ.Σ22
+    Σ11, Σ12, Σ22 = Σ.Σ11, Σ.Σ21, Σ.Σ22
     L11 = sqrt(Σ11)
     L12 = Σ12 / L11
     L22 = sqrt(Σ11 * Σ22 - Σ12 * Σ12) / L11
@@ -18,7 +18,7 @@ function LinearAlgebra.cholesky(Σ::BlockHermitian2by2)
 end
 
 function LinearAlgebra.inv(L::BlockLowerTriangular2by2)
-    (; L11, L21, L22)  = L
+    (; L11, L21, L22) = L
     Linv11 = inv(L11)
     Linv12 = -L21 / L11 / L22
     Linv22 = inv(L22)
@@ -37,26 +37,23 @@ function LinearAlgebra.logdet(Σ::BlockPDMat2by2)
 end
 
 function PDMats.quad(Σ::BlockPDMat2by2, x::BatchVectors2)
-    (; L11, L21, L22)  = Σ.L
-    (; x1, x2)         = x 
-    r21 = sum(abs2, L11*x1 + L21*x2, dims=1)[1,:]
-    r22 = sum(abs2, L22*x2, dims=1)[1,:]
-    r21 + r22
+    (; L11, L21, L22) = Σ.L
+    (; x1, x2)        = x
+    r21               = sum(abs2, L11 * x1 + L21 * x2; dims=1)[1, :]
+    r22               = sum(abs2, L22 * x2; dims=1)[1, :]
+    return r21 + r22
 end
 
 function PDMats.invquad(Σ::BlockPDMat2by2, x::BatchVectors2)
     (; L11, L21, L22) = Σ.Linv
-    (; x1, x2)        = x 
-    r21 = sum(abs2, L11*x1, dims=1)[1,:]
-    r22 = sum(abs2, L21*x1 + L22*x2, dims=1)[1,:]
-    r21 + r22
+    (; x1, x2)        = x
+    r21               = sum(abs2, L11 * x1; dims=1)[1, :]
+    r22               = sum(abs2, L21 * x1 + L22 * x2; dims=1)[1, :]
+    return r21 + r22
 end
 
 function LinearAlgebra.:\(Σ::BlockPDMat2by2, x::BatchVectors2)
-    (; L11, L21, L22)  = Σ.Linv
+    (; L11, L21, L22) = Σ.Linv
     Linvx = Σ.Linv * x
-    BatchVectors2(
-        L11*Linvx.x1 + L21*Linvx.x2,
-        L22*Linvx.x2
-    )
+    return BatchVectors2(L11 * Linvx.x1 + L21 * Linvx.x2, L22 * Linvx.x2)
 end

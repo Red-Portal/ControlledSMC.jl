@@ -68,9 +68,11 @@ function optimize_policy(sampler::AbstractControlledSMC, states; show_progress=t
 
     if show_progress
         println("\n")
-        display(lineplot(
-            1:T, reverse(rmses); title="ADP RMSE", xlabel="Iteration", ylabel="RMSE"
-        ))
+        display(
+            lineplot(
+                1:T, reverse(rmses); title="ADP RMSE", xlabel="Iteration", ylabel="RMSE"
+            ),
+        )
     end
 
     @set sampler.policy = policy_next

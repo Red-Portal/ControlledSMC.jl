@@ -34,7 +34,8 @@ end
 function potential_with_backward(
     ::SMCULA, ::DetailedBalance, t::Int, πt, πtm1, xt::AbstractMatrix, xtm1::AbstractMatrix
 )
-    return LogDensityProblems.logdensity(πt, xtm1) - LogDensityProblems.logdensity(πtm1, xtm1)
+    return LogDensityProblems.logdensity(πt, xtm1) -
+           LogDensityProblems.logdensity(πtm1, xtm1)
 end
 
 function potential_with_backward(

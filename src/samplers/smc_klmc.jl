@@ -1,8 +1,5 @@
 
-struct SMCKLMC{
-    Stepsize<:Real,
-    Sigma<:BlockPDMat2by2,
-} <: AbstractSMC
+struct SMCKLMC{Stepsize<:Real,Sigma<:BlockPDMat2by2} <: AbstractSMC
     stepsize   :: Stepsize
     damping    :: Stepsize
     sigma_klmc :: Sigma
@@ -18,10 +15,10 @@ function rand_initial_with_potential(
     rng::Random.AbstractRNG, ::SMCKLMC, path::AbstractPath, n_particles::Int
 )
     (; proposal,) = path
-    x      = rand(rng, proposal, n_particles)
+    x = rand(rng, proposal, n_particles)
     n_dims = size(x, 1)
-    v      = rand(rng, MvNormal(Zeros(n_dims), I), n_particles)
-    ℓG     = zeros(n_particles)
+    v = rand(rng, MvNormal(Zeros(n_dims), I), n_particles)
+    ℓG = zeros(n_particles)
     return vcat(x, v), ℓG
 end
 

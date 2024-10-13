@@ -29,8 +29,6 @@ function klmc_cov(d::Int, stepsize::Real, damping::Real)
     σ2xv = 1 / γ * (1 - 2 * η + η^2)
     σ2vv = 1 - η^2
     return BlockHermitian2by2(
-        Diagonal(fill(σ2xx, d)),
-        Diagonal(fill(σ2xv, d)),
-        Diagonal(fill(σ2vv, d)),
+        Diagonal(fill(σ2xx, d)), Diagonal(fill(σ2xv, d)), Diagonal(fill(σ2vv, d))
     )
 end

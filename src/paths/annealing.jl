@@ -28,7 +28,9 @@ function LogDensityProblems.logdensity(prob::AnnealedDensityProblem, x::Abstract
     end
 end
 
-function LogDensityProblems.logdensity_and_gradient(prob::AnnealedDensityProblem, x::AbstractVector)
+function LogDensityProblems.logdensity_and_gradient(
+    prob::AnnealedDensityProblem, x::AbstractVector
+)
     (; annealing, proposal, problem, adtype) = prob
     ℓπ0, ∇ℓπ0 = value_and_gradient(Base.Fix1(logpdf, proposal), adtype, x)
     ℓπT, ∇ℓπT = LogDensityProblems.logdensity_and_gradient(problem, x)

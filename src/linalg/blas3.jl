@@ -1,7 +1,5 @@
 
-function transpose_square(
-    L::BlockLowerTriangular2by2{<:Diagonal},
-)
+function transpose_square(L::BlockLowerTriangular2by2{<:Diagonal})
     # [L11 L21] × [L11    ]
     # [    L22]   [L21 L22]
     #
@@ -9,9 +7,5 @@ function transpose_square(
     #   [          A22*A21  L22*L22]
 
     (; L11, L21, L22) = L
-    BlockHermitian2by2(
-        L11*L11 + L21*L21,
-        L21*L22,
-        L22*L22,
-    )
+    return BlockHermitian2by2(L11 * L11 + L21 * L21, L21 * L22, L22 * L22)
 end

@@ -35,37 +35,30 @@ function control_cov(A::BlockDiagonal2by2, Σ::BlockPDMat2by2)
 end
 
 function twist_mvnormal_rand(
-    rng::Random.AbstractRNG,
-    twist,
-    μs::BatchVectors2,
-    Σ::BlockPDMat2by2,
+    rng::Random.AbstractRNG, twist, μs::BatchVectors2, Σ::BlockPDMat2by2
 )
-    (; a, b)   = twist
+    (; a, b) = twist
     d = length(a) ÷ 2
     n = size(μs.x1, 2)
-    b = BatchVectors2(repeat(b[1:d], 1, n), repeat(b[d+1:2*d], 1, n))
-    A = BlockDiagonal2by2(Diagonal(a[1:d]), Diagonal(a[d+1:2*d]))
+    b = BatchVectors2(repeat(b[1:d], 1, n), repeat(b[(d + 1):(2 * d)], 1, n))
+    A = BlockDiagonal2by2(Diagonal(a[1:d]), Diagonal(a[(d + 1):(2 * d)]))
     K = control_cov(A, Σ)
 
     μs_twist = K.Σ * ((Σ \ μs) - b)
     z_st     = rand(rng, BatchMvNormal(μs_twist, K))
-    vcat(z_st.x1, z_st.x2)
+    return vcat(z_st.x1, z_st.x2)
 end
 
-function twist_mvnormal_logmarginal(
-    twist,
-    μs::BatchVectors2,
-    Σ::BlockPDMat2by2,
-)
+function twist_mvnormal_logmarginal(twist, μs::BatchVectors2, Σ::BlockPDMat2by2)
     (; a, b, c) = twist
-    d     = length(a) ÷ 2
-    n     = size(μs.x1, 2)
-    A     = BlockDiagonal2by2(Diagonal(a[1:d]), Diagonal(a[d+1:2*d]))
-    b     = BatchVectors2(repeat(b[1:d], 1, n), repeat(b[d+1:2*d], 1, n))
-    K     = control_cov(A, Σ)
+    d = length(a) ÷ 2
+    n = size(μs.x1, 2)
+    A = BlockDiagonal2by2(Diagonal(a[1:d]), Diagonal(a[(d + 1):(2 * d)]))
+    b = BatchVectors2(repeat(b[1:d], 1, n), repeat(b[(d + 1):(2 * d)], 1, n))
+    K = control_cov(A, Σ)
     ℓdetΣ = logdet(Σ)
     ℓdetK = logdet(K)
-    z     = (Σ \ μs) - b
+    z = (Σ \ μs) - b
     return ((-ℓdetΣ + ℓdetK) .+ (PDMats.quad(K, z) - PDMats.invquad(Σ, μs))) / 2 .- c
 end
 
