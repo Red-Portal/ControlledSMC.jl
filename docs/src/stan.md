@@ -12,13 +12,13 @@ using PosteriorDB
 using ProgressMeter
 using Random, Random123
 
-function experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
+function experiment_smcuhmc(rng, path, n_steps, d, n_particles, n_reps, ylims)
     stepsizes = 10.0.^range(-4, -1; length=8)
     dampings  = [0.05, 0.1, 0.15, 0.2]
 
     for α in dampings
         ℓZs = @showprogress map(stepsizes) do ϵ
-            sampler = SMCUHMC(ϵ, α, Eye(d))
+            sampler = SMCUHMC(ϵ, α, n_steps, Eye(d))
             mean(1:n_reps) do k
                 try 
                     rng_local = deepcopy(rng)
@@ -47,13 +47,13 @@ function experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
     end
 end
 
-function experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
+function experiment_smcklmc(rng, path, n_steps, d, n_particles, n_reps, ylims)
     stepsizes = 10.0.^range(-5, -2; length=8)
     dampings  = [100., 500., 1000., 5000]
 
     for γ in dampings
         ℓZs = @showprogress map(stepsizes) do h
-            sampler = SMCKLMC(d, γ*h, γ)
+            sampler = SMCKLMC(d, γ*h, γ, n_steps)
             mean(1:n_reps) do k
                 try 
                     rng_local = deepcopy(rng)
@@ -82,11 +82,11 @@ function experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
     end
 end
 
-function experiment_smcula(rng, path, d, n_particles, n_reps, ylims)
+function experiment_smcula(rng, path, n_steps, d, n_particles, n_reps, ylims)
     ula_stepsizes = 10.0.^range(-5, -2; length=4)
 
     ℓZs = @showprogress map(ula_stepsizes) do h
-        sampler = SMCULA(h, h, TimeCorrectForwardKernel(), Eye(d), path)
+        sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Eye(d))
         mean(1:n_reps) do k
             try 
                 rng_local = deepcopy(rng)
@@ -131,9 +131,9 @@ function run_stanmodel(name, ylims)
     n_particles = 256
 
     Plots.plot() |> display
-    experiment_smcula( rng, path, d, n_particles, n_reps, ylims)
-    experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
-    experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
+    experiment_smcula( rng, path, n_iters, d, n_particles, n_reps, ylims)
+    experiment_smcuhmc(rng, path, n_iters, d, n_particles, n_reps, ylims)
+    experiment_smcklmc(rng, path, n_iters, d, n_particles, n_reps, ylims)
 end
 
 if !isdir(".stan")
