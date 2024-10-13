@@ -48,7 +48,7 @@ function main()
     stepsize    = 0.1
     damping     = 100.0
     n_particles = 512
-    n_episodes  = 10
+    n_episodes  = 3
 
     # smc  = SMCKLMC(d, stepsize*damping, damping)
     # csmc = CSMCKLMC(smc, path)
