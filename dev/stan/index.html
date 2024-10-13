@@ -9,13 +9,13 @@ using PosteriorDB
 using ProgressMeter
 using Random, Random123
 
-function experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
+function experiment_smcuhmc(rng, path, n_steps, d, n_particles, n_reps, ylims)
     stepsizes = 10.0.^range(-4, -1; length=8)
     dampings  = [0.05, 0.1, 0.15, 0.2]
 
     for α in dampings
         ℓZs = @showprogress map(stepsizes) do ϵ
-            sampler = SMCUHMC(ϵ, α, Eye(d))
+            sampler = SMCUHMC(ϵ, α, n_steps, Eye(d))
             mean(1:n_reps) do k
                 try
                     rng_local = deepcopy(rng)
@@ -44,13 +44,13 @@ function experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
     end
 end
 
-function experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
+function experiment_smcklmc(rng, path, n_steps, d, n_particles, n_reps, ylims)
     stepsizes = 10.0.^range(-5, -2; length=8)
     dampings  = [100., 500., 1000., 5000]
 
     for γ in dampings
         ℓZs = @showprogress map(stepsizes) do h
-            sampler = SMCKLMC(d, γ*h, γ)
+            sampler = SMCKLMC(d, γ*h, γ, n_steps)
             mean(1:n_reps) do k
                 try
                     rng_local = deepcopy(rng)
@@ -79,11 +79,11 @@ function experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
     end
 end
 
-function experiment_smcula(rng, path, d, n_particles, n_reps, ylims)
+function experiment_smcula(rng, path, n_steps, d, n_particles, n_reps, ylims)
     ula_stepsizes = 10.0.^range(-5, -2; length=4)
 
     ℓZs = @showprogress map(ula_stepsizes) do h
-        sampler = SMCULA(h, h, TimeCorrectForwardKernel(), Eye(d), path)
+        sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Eye(d))
         mean(1:n_reps) do k
             try
                 rng_local = deepcopy(rng)
@@ -128,13 +128,13 @@ function run_stanmodel(name, ylims)
     n_particles = 256
 
     Plots.plot() |&gt; display
-    experiment_smcula( rng, path, d, n_particles, n_reps, ylims)
-    experiment_smcuhmc(rng, path, d, n_particles, n_reps, ylims)
-    experiment_smcklmc(rng, path, d, n_particles, n_reps, ylims)
+    experiment_smcula( rng, path, n_iters, d, n_particles, n_reps, ylims)
+    experiment_smcuhmc(rng, path, n_iters, d, n_particles, n_reps, ylims)
+    experiment_smcklmc(rng, path, n_iters, d, n_particles, n_reps, ylims)
 end
 
 if !isdir(&quot;.stan&quot;)
     mkdir(&quot;.stan&quot;)
 end</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;.stan&quot;</code></pre><pre><code class="language-julia hljs">run_stanmodel(&quot;radon_mn-radon_hierarchical_intercept_noncentered&quot;, (-1300, Inf))
 Plots.savefig(&quot;vanilla_smc_radon.svg&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;/home/runner/work/ControlledSMC.jl/ControlledSMC.jl/docs/build/vanilla_smc_radon.svg&quot;</code></pre><p><img src="../vanilla_smc_radon.svg" alt/></p><pre><code class="language-julia hljs">run_stanmodel(&quot;dogs-dogs&quot;, (-300, Inf))
-Plots.savefig(&quot;vanilla_smc_dogs-dogs.svg&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;/home/runner/work/ControlledSMC.jl/ControlledSMC.jl/docs/build/vanilla_smc_dogs-dogs.svg&quot;</code></pre><p><img src="../vanilla_smc_dogs-dogs.svg" alt/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Friday 20 September 2024 06:24">Friday 20 September 2024</span>. Using Julia version 1.10.5.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
+Plots.savefig(&quot;vanilla_smc_dogs-dogs.svg&quot;)</code></pre><pre class="documenter-example-output"><code class="nohighlight hljs ansi">&quot;/home/runner/work/ControlledSMC.jl/ControlledSMC.jl/docs/build/vanilla_smc_dogs-dogs.svg&quot;</code></pre><p><img src="../vanilla_smc_dogs-dogs.svg" alt/></p></article><nav class="docs-footer"><a class="docs-footer-prevpage" href="../">« Home</a><div class="flexbox-break"></div><p class="footer-message">Powered by <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> and the <a href="https://julialang.org/">Julia Programming Language</a>.</p></nav></div><div class="modal" id="documenter-settings"><div class="modal-background"></div><div class="modal-card"><header class="modal-card-head"><p class="modal-card-title">Settings</p><button class="delete"></button></header><section class="modal-card-body"><p><label class="label">Theme</label><div class="select"><select id="documenter-themepicker"><option value="auto">Automatic (OS)</option><option value="documenter-light">documenter-light</option><option value="documenter-dark">documenter-dark</option><option value="catppuccin-latte">catppuccin-latte</option><option value="catppuccin-frappe">catppuccin-frappe</option><option value="catppuccin-macchiato">catppuccin-macchiato</option><option value="catppuccin-mocha">catppuccin-mocha</option></select></div></p><hr/><p>This document was generated with <a href="https://github.com/JuliaDocs/Documenter.jl">Documenter.jl</a> version 1.7.0 on <span class="colophon-date" title="Sunday 13 October 2024 04:48">Sunday 13 October 2024</span>. Using Julia version 1.11.0.</p></section><footer class="modal-card-foot"></footer></div></div></div></body></html>
