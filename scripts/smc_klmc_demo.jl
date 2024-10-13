@@ -53,7 +53,7 @@ function main()
     dampings = [5.0, 10.0, 20.0]
 
     for (idx, damping) in enumerate(dampings)
-        sampler = SMCKLMC(d, stepsize*damping, damping)
+        sampler = SMCKLMC(d, stepsize*damping, damping, n_iters)
 
         res = @showprogress map(1:64) do _
             xs, _, _, stats = ControlledSMC.sample(

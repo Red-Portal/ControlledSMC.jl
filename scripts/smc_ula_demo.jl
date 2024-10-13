@@ -40,9 +40,8 @@ function main()
     schedule = range(0, 1; length=n_iters)
     path     = GeometricAnnealingPath(schedule, proposal, prob_ad)
 
-    h0 = 0.5
-    hT = 0.5
-    Γ  = Eye(d)
+    h = 0.5
+    Γ = Eye(d)
 
     display(hline([0.0]; label="True logZ"))
 
@@ -57,7 +56,7 @@ function main()
     # SMC-ULA with reverse kernel set as:
     #     L_{t-1}(x_{t-1}, x_t) = K_{t-1}(x_{t-1}, x_t)
     #
-    sampler = SMCULA(h0, hT, TimeCorrectForwardKernel(), Γ, path)
+    sampler = SMCULA(h, n_iters, TimeCorrectForwardKernel(), Γ)
     particles = [32, 64, 128]#, 256, 512]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
@@ -89,7 +88,7 @@ function main()
     # SMC-ULA with reverse kernel set as:
     #     L_{t-1}(x_{t-1}, x_t) = K_t(x_{t-1}, x_t)
     #
-    sampler = SMCULA(h0, hT, ForwardKernel(), Γ, path)
+    sampler = SMCULA(h, n_iters, ForwardKernel(), Γ)
     particles = [32, 64, 128]#, 256, 512]
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
@@ -121,7 +120,7 @@ function main()
     # SMC-ULA with reverse kernel set as:
     #     L_{t-1}(x_{t-1}, x_t) = \pi_{t}(x_{t}) K_t(x_t, x_{t-1}) / \pi_{t-1}(x_{t-1})
     #
-    sampler = SMCULA(h0, hT, DetailedBalance(), Γ, path)
+    sampler = SMCULA(h, n_iters, DetailedBalance(), Γ)
     for (idx, n_particles) in enumerate(particles)
         res = @showprogress map(1:64) do _
             xs, _, _, stats = ControlledSMC.sample(
