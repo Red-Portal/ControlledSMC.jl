@@ -6,6 +6,7 @@ using Accessors
 using DifferentiationInterface
 using Distributions
 using FillArrays
+using DataInterpolations
 using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
@@ -44,7 +45,7 @@ export GeometricAnnealingPath
 include("paths/adaptive_geometric_annealing.jl")
 export AdaptiveGeometricAnnealing
 
-# Backward Kernels
+# Vanilla SMC Samplers
 include("backwardkernel.jl")
 export DetailedBalance, ForwardKernel, TimeCorrectForwardKernel
 
@@ -60,6 +61,10 @@ export SMCUHMC
 include("samplers/smc_klmc.jl")
 export SMCKLMC
 
+# Optimized Annlealed SMC
+include("paths/update_schedule.jl")
+
+# Controlled SMC
 abstract type AbstractControlledSMC <: AbstractSMC end
 
 include("control/twist.jl")
