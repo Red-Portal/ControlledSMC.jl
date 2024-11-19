@@ -42,8 +42,8 @@ function main()
     for i in 1:3
         schedule, local_barrier, _ = ControlledSMC.update_schedule(schedule, stats, n_iters)
 
-        path          = @set path.schedule = schedule
-        sampler       = SMCULA(h, n_iters, TimeCorrectForwardKernel(), Γ)
+        path    = @set path.schedule = schedule
+        sampler = SMCULA(h, n_iters, TimeCorrectForwardKernel(), Γ)
         _, _, states, stats = ControlledSMC.sample(
             rng, sampler, path, n_particles, 0.5; show_progress=true
         )

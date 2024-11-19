@@ -24,7 +24,7 @@ function mutate_with_potential(
     q      = gradient_flow_euler(πt, xtm1, ht, Γ)
     xt     = q + sqrt(2 * ht) * unwhiten(Γ, randn(rng, eltype(q), size(q)))
     ℓG     = potential(sampler, t, πt, πtm1, xt, xtm1)
-    return xt, ℓG, NamedTuple()
+    return xt, ℓG, (q=q,)
 end
 
 function potential(

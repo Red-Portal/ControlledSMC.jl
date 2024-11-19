@@ -71,7 +71,7 @@ function sample(
         end
 
         target_prev = target
-        state = merge((particles=x, log_potential=ℓG,), state)
+        state = merge((particles=x, log_potential=ℓG,), aux)
         stat  = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), stat)
         push!(states, state)
         push!(stats, stat)
