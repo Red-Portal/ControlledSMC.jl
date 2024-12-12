@@ -8,11 +8,16 @@ function rand_initial_with_potential(
 end
 
 function log_potential_moments(ℓw::AbstractVector, ℓG::AbstractVector)
-    N   = length(ℓw)
     ℓ∑w = logsumexp(ℓw)
     ℓG1 = logsumexp(ℓw + ℓG) - ℓ∑w
-    ℓG2 = logsumexp(ℓw + 2*ℓG) - ℓ∑w
-    (log_potential_moments=(ℓG1, ℓG2),)
+    ℓG2 = logsumexp(ℓw + 2 * ℓG) - ℓ∑w
+    return (log_potential_moments=(ℓG1, ℓG2),)
+end
+
+function adapt_sampler(
+    ::AbstractRNG, sampler, ::Int, ::Any, ::Any, ::AbstractMatrix, ::AbstractVector
+)
+    return sampler
 end
 
 function sample(
@@ -52,6 +57,7 @@ function sample(
     target_prev = get_target(path, 1)
     for t in 2:n_iters
         target     = get_target(path, t)
+        sampler    = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
         x, ℓG, aux = mutate_with_potential(rng, sampler, t, target, target_prev, x)
 
         stat = log_potential_moments(ℓw, ℓG)
@@ -71,14 +77,14 @@ function sample(
         end
 
         target_prev = target
-        state = merge((particles=x, log_potential=ℓG,), aux)
-        stat  = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), stat)
+        state = merge((particles=x, log_potential=ℓG), aux)
+        stat = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), stat)
         push!(states, state)
         push!(stats, stat)
         pm_next!(prog, last(stats))
     end
     ℓw_norm, _ = normalize_weights(ℓw)
-    return x, ℓw_norm, states, stats
+    return x, ℓw_norm, sampler, states, stats
 end
 
 function sample(
