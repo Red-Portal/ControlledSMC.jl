@@ -3,15 +3,19 @@ abstract type AbstractAdaptor end
 
 struct NoAdaptation <: AbstractAdaptor end
 
-struct PathForwardKLMin <: AbstractAdaptor end
+struct ForwardKLMin <: AbstractAdaptor end
 
-struct PathBackwardKLMin <: AbstractAdaptor end
+struct BackwardKLMin <: AbstractAdaptor end
+
+struct PartialForwardKLMin <: AbstractAdaptor end
+
+struct PartialBackwardKLMin <: AbstractAdaptor end
 
 struct AnnealedFlowTransport <: AbstractAdaptor end
 
 adaptation_objective(::NoAdaptation, ::AbstractVector, ::AbstractVector) = 0.0
 
-function adaptation_objective(::PathForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector)
+function adaptation_objective(::ForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector)
     N        = length(ℓw)
     ℓ∑w      = logsumexp(ℓw)
     ℓw_norm  = @. ℓw - ℓ∑w
@@ -22,13 +26,30 @@ function adaptation_objective(::PathForwardKLMin, ℓw::AbstractVector, ℓG::Ab
     return dot(w′_norm, ℓG) - ℓEw′
 end
 
-function adaptation_objective(::PathBackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector)
+function adaptation_objective(::BackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector)
     N        = length(ℓw)
     ℓ∑w      = logsumexp(ℓw)
     ℓw_norm  = @. ℓw - ℓ∑w
     ℓw′      = ℓw_norm + ℓG
     ℓEw′     = logsumexp(ℓw′) - log(N)
     return -mean(ℓG) + ℓEw′
+end
+
+function adaptation_objective(
+    ::PartialForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector
+)
+    ℓ∑w      = logsumexp(ℓw)
+    ℓw_norm  = @. ℓw - ℓ∑w
+    ℓw′      = ℓw_norm + ℓG
+    ℓ∑w′     = logsumexp(ℓw′)
+    w′_norm  = @. exp(ℓw′ - ℓ∑w′)
+    return dot(w′_norm, ℓG)
+end
+
+function adaptation_objective(
+    ::PartialBackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector
+)
+    return -mean(ℓG)
 end
 
 function adaptation_objective(

@@ -37,7 +37,13 @@ include("batchmvnormal.jl")
 include("logdensity.jl")
 
 include("adaptation.jl")
-export NoAdaptation, PathForwardKLMin, PathBackwardKLMin, AnnealedFlowTransport
+export
+    NoAdaptation,
+    ForwardKLMin,
+    BackwardKLMin,
+    PartialForwardKLMin,
+    PartialBackwardKLMin,
+    AnnealedFlowTransport
 
 # Target Paths
 include("paths/annealing.jl")

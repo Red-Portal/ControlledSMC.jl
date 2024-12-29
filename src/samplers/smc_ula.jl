@@ -1,4 +1,6 @@
 
+using Plots
+
 struct SMCULA{
     Stepsizes<:AbstractVector,
     Backward<:AbstractBackwardKernel,
@@ -105,7 +107,7 @@ function adapt_sampler(
         return sampler
     end
 
-    # ℓh_range = range(-3, 1; length=64)
+    # ℓh_range = range(-5, 2; length=64)
     # L        = map(ℓh_range) do ℓh′
     #     rng_fixed = copy(rng)
     #     sampler′  = @set sampler.stepsizes[t] = exp(ℓh′)
@@ -115,7 +117,7 @@ function adapt_sampler(
     # Plots.plot(ℓh_range, L) |> display
 
     ht = log(sampler.stepsizes[t])
-    ℓh = golden_section_search(-3, 1) do ℓh′
+    ℓh = golden_section_search(-5, 2; n_iters=30) do ℓh′
         rng_fixed = copy(rng)
         sampler′  = @set sampler.stepsizes[t] = exp(ℓh′)
         _, ℓG, _  = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1)

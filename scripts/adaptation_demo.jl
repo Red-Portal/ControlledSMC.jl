@@ -25,23 +25,27 @@ function LogDensityProblems.logdensity(prob::Dist, x)
     return logpdf(prob.dist, x)
 end
 
-function run_smc(rng, sampler, path, n_particles, n_steps, n_episodes)
-    log_normalizer_est = []
+function run_smc(rng, sampler, path, n_particles, n_steps, n_reps)
     _, _, sampler, states, stats = ControlledSMC.sample(
         rng, sampler, path, n_particles, 0.5; show_progress=true
     )
-    push!(log_normalizer_est, last(stats).log_normalizer)
 
-    for i in 1:n_episodes
-        schedule, _, _               = ControlledSMC.update_schedule(path.schedule, stats, n_steps)
-        path                         = @set path.schedule = schedule
-        _, _, sampler, states, stats = ControlledSMC.sample(
-            rng, sampler, path, n_particles, 0.5; show_progress=true
+    # schedule, _, _               = ControlledSMC.update_schedule(path.schedule, stats, n_steps)
+    # path                         = @set path.schedule = schedule
+    # _, _, sampler, states, stats = ControlledSMC.sample(
+    #     rng, sampler, path, n_particles, 0.5; show_progress=true
+    # )
+
+    @showprogress pmap(1:n_reps) do key
+        seed = (0x38bef07cf9cc549d, 0x49e2430080b3f797)
+        rng  = Philox4x(UInt64, seed, 8)
+        set_counter!(rng, key)
+        
+        _, _, _, _, stats = ControlledSMC.sample(
+            rng, sampler, path, n_particles, 0.5; show_progress=false
         )
-
-        push!(log_normalizer_est, last(stats).log_normalizer)
+        last(stats).log_normalizer
     end
-    log_normalizer_est
 end
 
 function main()
@@ -54,42 +58,59 @@ function main()
     prob    = Dist(MvNormal(μ, 0.3*I))
     prob_ad = ADgradient(AutoReverseDiff(), prob)
 
-    n_episodes  = 3
+    n_reps      = 32
     n_particles = 512
-    n_steps     = 16
-    proposal    = MvNormal(Zeros(d), I)
+    n_steps     = 32
+    proposal    = MvNormal(Zeros(d), 3*I)
     schedule    = range(0, 1; length=n_steps)
     path        = GeometricAnnealingPath(schedule, proposal, prob_ad)
 
     Plots.plot() |> display
+    plot_idx = 0  
 
-    h       = 0.1
-    Γ       = Eye(d)
-    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, NoAdaptation())
-    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_episodes)
-    Plots.plot!(ℓZ_ests, label="No Adaptation h = $(h)") |> display
+    #h       = 0.1
+    #Γ       = Eye(d)
+    #sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, NoAdaptation())
+    #ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_episodes)
+    #Plots.plot!(ℓZ_ests, label="No Adaptation h = $(h)") |> display
 
-    h       = 0.3
-    Γ       = Eye(d)
-    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, NoAdaptation())
-    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_episodes)
-    Plots.plot!(ℓZ_ests, label="No Adaptation h = $(h)") |> display
 
     h       = 0.3
+    Γ       = Eye(d)
+    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, NoAdaptation())
+    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_reps)
+    boxplot!(fill(plot_idx, length(ℓZ_ests)), ℓZ_ests, label="No Adaptation h = $(h)",
+             ylabel="log Z estimates",
+             ylims=(-75,5),
+             ) |> display
+    plot_idx += 1
+
     Γ       = Eye(d)
     sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, AnnealedFlowTransport())
-    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_episodes)
-    Plots.plot!(ℓZ_ests, label="AFT") |> display
+    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_reps)
+    boxplot!(fill(plot_idx, length(ℓZ_ests)), ℓZ_ests, label="AFT") |> display
+    plot_idx += 1
 
-    h       = 0.3
     Γ       = Eye(d)
-    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, PathForwardKLMin())
-    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_episodes)
-    Plots.plot!(ℓZ_ests, label="Path forward KL") |> display
+    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, ForwardKLMin())
+    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_reps)
+    boxplot!(fill(plot_idx, length(ℓZ_ests)), ℓZ_ests, label="Forward KL") |> display
+    plot_idx += 1
 
-    h       = 0.3
     Γ       = Eye(d)
-    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, PathBackwardKLMin())
-    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_episodes)
-    Plots.plot!(ℓZ_ests, label="Path reverse KL") |> display
+    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, BackwardKLMin())
+    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_reps)
+    boxplot!(fill(plot_idx, length(ℓZ_ests)), ℓZ_ests, label="Backward KL") |> display
+    plot_idx += 1
+
+    Γ       = Eye(d)
+    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, PartialForwardKLMin())
+    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_reps)
+    boxplot!(fill(plot_idx, length(ℓZ_ests)), ℓZ_ests, label="Partial Forward KL") |> display
+    plot_idx += 1
+
+    Γ       = Eye(d)
+    sampler = SMCULA(h, n_steps, TimeCorrectForwardKernel(), Γ, PartialBackwardKLMin())
+    ℓZ_ests = run_smc(rng, sampler, path, n_particles, n_steps, n_reps)
+    boxplot!(fill(plot_idx, length(ℓZ_ests)), ℓZ_ests, label="Partial Backward KL") |> display
 end
