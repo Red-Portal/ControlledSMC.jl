@@ -53,14 +53,16 @@ function sample(
     stat  = (iteration=1, ess=n_particles, log_normalizer=ℓZ, resampled=resampled)
     push!(states, state)
     push!(stats, stat)
+    pm_next!(prog, last(stats))
 
     target_prev = get_target(path, 1)
     for t in 2:n_iters
-        target     = get_target(path, t)
-        sampler    = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
-        x, ℓG, aux = mutate_with_potential(rng, sampler, t, target, target_prev, x)
+        target        = get_target(path, t)
+        sampler, stat = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
+        x, ℓG, aux    = mutate_with_potential(rng, sampler, t, target, target_prev, x)
 
-        stat = log_potential_moments(ℓw, ℓG)
+        stat′ = log_potential_moments(ℓw, ℓG)
+        stat = merge(stat′, stat)
 
         ℓw                   = ℓw + ℓG
         ℓw_norm, ess         = normalize_weights(ℓw)

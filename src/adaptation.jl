@@ -13,6 +13,10 @@ struct PartialBackwardKLMin <: AbstractAdaptor end
 
 struct AnnealedFlowTransport <: AbstractAdaptor end
 
+struct LogPotentialVarianceMin <: AbstractAdaptor end
+
+struct CondESSMax <: AbstractAdaptor end
+
 adaptation_objective(::NoAdaptation, ::AbstractVector, ::AbstractVector) = 0.0
 
 function adaptation_objective(::ForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector)
@@ -55,17 +59,34 @@ end
 function adaptation_objective(
     ::AnnealedFlowTransport, ℓw::AbstractVector, ℓG::AbstractVector
 )
-    ℓw′     = ℓw + ℓG
-    ∑ℓw′    = logsumexp(ℓw′)
-    w′_norm = @. exp(ℓw′ - ∑ℓw′)
-    return dot(w′_norm, -ℓG)
+    ∑ℓw    = logsumexp(ℓw)
+    w_norm = @. exp(ℓw - ∑ℓw)
+    return dot(w_norm, -ℓG)
 end
 
-function golden_section_search(
-    f, a::Real, b::Real; n_iters::Int=10, abstol::Real=1e-4
+function adaptation_objective(
+    ::CondESSMax, ℓw::AbstractVector, ℓG::AbstractVector
 )
-    ϕinv = (√5 - 1)/2
-    for _ in 1:n_iters
+    N         = length(ℓw)
+    ℓ∑WG      = logsumexp(ℓw + ℓG)
+    ℓEWG2     = logsumexp(ℓw + 2*ℓG) - log(N)
+    ℓcond_ess = 2*ℓ∑WG - ℓEWG2
+    -ℓcond_ess
+end
+
+function adaptation_objective(
+    ::LogPotentialVarianceMin, ℓw::AbstractVector, ℓG::AbstractVector
+)
+    return var(ℓG)
+end
+
+
+function golden_section_search(
+    f, a::Real, b::Real; n_max_iters::Int=10, abstol::Real=1e-2
+)
+    ϕinv    = (√5 - 1)/2
+    n_iters = 0
+    for t in 1:n_max_iters
         c = b - (b - a) * ϕinv
         d = a + (b - a) * ϕinv
 
@@ -75,6 +96,8 @@ function golden_section_search(
             a = c
         end
 
+        n_iters = t
+
         if (b - a) ≤ abstol
             break
         end
@@ -83,31 +106,5 @@ function golden_section_search(
             throw(ErrorException("Golden section search failed at b = $b, a = $a with f((a+b)/2) = $(f((a+b)/2))"))
         end
     end
-    (b + a) / 2
-end
-
-function zeroth_order_newton(
-    f, x0::Real; n_iters::Int=10, stepsize::Real=1e-2, reltol::Real=1e-4
-)
-    h = stepsize
-    x = x0
-    for t in 1:n_iters
-        fx  = f(x)
-        fxp = f(x + h)
-        fxm = f(x - h)
-        x′  = x - h / 2 * (fxp - fxm) / (fxp - 2 * fx + fxm)
-
-        @info("", t, x, fx, abs(x′ - x) / x)
-
-        if abs(x′ - x) / abs(x) < reltol
-            break
-        end
-
-        if !isfinite(x′)
-            throw(ErrorException("Zeroth order Newton failed at x = $x with f(x) = $fx"))
-        end
-
-        x = x′
-    end
-    return x
+    (b + a) / 2, n_iters
 end

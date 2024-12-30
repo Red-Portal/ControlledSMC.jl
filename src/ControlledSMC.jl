@@ -39,11 +39,13 @@ include("logdensity.jl")
 include("adaptation.jl")
 export
     NoAdaptation,
+    CondESSMax,
     ForwardKLMin,
     BackwardKLMin,
     PartialForwardKLMin,
     PartialBackwardKLMin,
-    AnnealedFlowTransport
+    AnnealedFlowTransport,
+    LogPotentialVarianceMin
 
 # Target Paths
 include("paths/annealing.jl")
