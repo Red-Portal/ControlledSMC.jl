@@ -157,7 +157,7 @@ function golden_section_search(f, a::Real, b::Real; n_max_iters::Int=10, abstol:
     return (b + a) / 2, n_iters
 end
 
-function approx_exact_linesearch(f, x::Real, t0::Real, dir::Real)
+function approx_exact_linesearch(f, x, t0::Real, dir)
     β  = 0.9 #2/(1 + √5)
     d  = dir
     t  = t0
