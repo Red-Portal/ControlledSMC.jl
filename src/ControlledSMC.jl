@@ -47,7 +47,8 @@ export
     PartialBackwardKLMin,
     AnnealedFlowTransport,
     LogPotentialVarianceMin,
-    AcceptanceRate
+    AcceptanceRateCtrl,
+    ESJDMax
 
 # Target Paths
 include("paths/annealing.jl")
@@ -70,6 +71,9 @@ export SMCULA
 
 include("samplers/smc_mala.jl")
 export SMCMALA
+
+include("samplers/smc_barker.jl")
+export SMCBarker
 
 include("samplers/smc_uhmc.jl")
 export SMCUHMC

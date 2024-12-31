@@ -1,49 +1,45 @@
 
-struct SMCMALA{
-    Stepsizes<:AbstractVector,
-    Precond<:AbstractMatrix,
-    Adaptor<:AbstractAdaptor,
+struct SMCBarker{
+    Stepsizes<:AbstractVector,Precond<:AbstractMatrix,Adaptor<:AbstractAdaptor
 } <: AbstractSMC
     stepsizes :: Stepsizes
     precond   :: Precond
     adaptor   :: Adaptor
 end
 
-function SMCMALA(
+function SMCBarker(
     stepsize::Real,
     n_steps::Int,
     precond::AbstractMatrix,
-    adaptor::Union{<:NoAdaptation, <:AcceptanceRateCtrl, <:ESJDMax},
+    adaptor::Union{<:NoAdaptation,<:AcceptanceRateCtrl,<:ESJDMax},
 )
     stepsizes = Fill(stepsize, n_steps)
-    return SMCMALA{typeof(stepsizes),typeof(precond),typeof(adaptor)}(
+    return SMCBarker{typeof(stepsizes),typeof(precond),typeof(adaptor)}(
         stepsizes, precond, adaptor
     )
 end
 
-function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
+function transition_barker(rng::Random.AbstractRNG, σ, π, x::AbstractMatrix)
     n_particles = size(x, 2)
 
-    μ_fwd  = gradient_flow_euler(πt, x, h, Γ)
-    x_prop = μ_fwd + sqrt(2 * h) * unwhiten(Γ, randn(rng, eltype(μ_fwd), size(μ_fwd)))
+    ∇ℓπ_x = logdensity_gradient(π, x)
+    ℓπ_x = LogDensityProblems.logdensity(π, x)
+    z = σ * randn(rng, size(x))
+    p_dir = @. logistic(z * ∇ℓπ_x)
+    b = @. 2 * rand(rng, Bernoulli(p_dir)) - 1
+    y = x + b .* z
+    ∇ℓπ_y = logdensity_gradient(π, y)
+    ℓπ_y = LogDensityProblems.logdensity(π, y)
 
-    μ_bwd = gradient_flow_euler(πt, x_prop, h, Γ)
+    ℓq_fwd = sum((@. log1pexp((y - x) * ∇ℓπ_y)); dims=1)[1, :]
+    ℓq_bwd = sum((@. log1pexp((x - y) * ∇ℓπ_x)); dims=1)[1, :]
 
-    ℓπt_prop = LogDensityProblems.logdensity(πt, x_prop)
-    ℓπt      = LogDensityProblems.logdensity(πt, x)
-
-    q_fwd = MvNormal.(eachcol(μ_fwd), Ref(2 * h * Γ))
-    q_bwd = MvNormal.(eachcol(μ_bwd), Ref(2 * h * Γ))
-
-    ℓq_fwd = logpdf.(q_fwd, eachcol(x_prop))
-    ℓq_bwd = logpdf.(q_bwd, eachcol(x))
-
-    ℓα = @. min(ℓπt_prop - ℓπt + ℓq_bwd - ℓq_fwd, 0)
-    ℓu = -Random.randexp(rng, length(ℓα))
+    ℓα = @. min(ℓπ_y - ℓπ_x + ℓq_bwd - ℓq_fwd, 0)
+    ℓu = -Random.randexp(rng, n_particles)
 
     x_next = mapreduce(hcat, 1:size(x, 2)) do n
         if ℓα[n] > ℓu[n]
-            x_prop[:, n]
+            y[:, n]
         else
             x[:, n]
         end
@@ -52,26 +48,26 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
     return x_next, α
 end
 
-function potential(::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix)
+function potential(::SMCBarker, t::Int, πt, πtm1, xtm1::AbstractMatrix)
     ℓπt_xtm1   = LogDensityProblems.logdensity(πt, xtm1)
     ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
     return ℓπt_xtm1 - ℓπtm1_xtm1
 end
 
 function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix
+    rng::Random.AbstractRNG, sampler::SMCBarker, t::Int, πt, πtm1, xtm1::AbstractMatrix
 )
-    (; stepsizes, precond) = sampler
-    ht, Γ = stepsizes[t], precond
+    (; stepsizes,) = sampler
+    σt = stepsizes[t]
 
-    xt, _ = transition_mala(rng, ht, Γ, πt, xtm1)
+    xt, _ = transition_barker(rng, σt, πt, xtm1)
     ℓG    = potential(sampler, t, πt, πtm1, xtm1)
     return xt, ℓG, NamedTuple()
 end
 
 function adapt_sampler(
     rng::Random.AbstractRNG,
-    sampler::SMCMALA,
+    sampler::SMCBarker,
     t::Int,
     πt,
     πtm1,
@@ -93,7 +89,7 @@ function adapt_sampler(
     function obj(ℓh′)
         rng_fixed = copy(rng)
         xt_sub, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-        esjd      = mean(sum(abs2.(xt_sub - xtm1_sub), dims=1))
+        esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
         return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd)
     end
 
@@ -111,8 +107,8 @@ function adapt_sampler(
             GradientDescent(),
             Optim.Options(; x_tol=1e-2, iterations=30),
         )
-        ℓh = Optim.minimizer(res) |> only
-        h  = exp(ℓh)
+        ℓh = only(Optim.minimizer(res))
+        h = exp(ℓh)
 
         _, α = transition_mala(rng, h, Γ, πt, xtm1_sub)
 
@@ -137,7 +133,7 @@ function adapt_sampler(
         _, α = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
 
         sampler = @set sampler.stepsizes[t] = h
-        stats   = (golden_section_search_iterations = n_gss_iters, mala_stepsize                    = h, acceptance_rate                  = α)
+        stats   = (golden_section_search_iterations=n_gss_iters, mala_stepsize=h, acceptance_rate=α)
         return sampler, stats
     end
 end

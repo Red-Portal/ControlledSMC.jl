@@ -27,7 +27,11 @@ struct LogPotentialVarianceMin <: AbstractAdaptor
     n_subsample::Int
 end
 
-struct AcceptanceRate{Acc<:Real} <: AbstractAdaptor
+struct ESJDMax <: AbstractAdaptor
+    n_subsample::Int
+end
+
+struct AcceptanceRateCtrl{Acc<:Real} <: AbstractAdaptor
     n_subsample::Int
     target_acceptance_rate::Acc
 end
@@ -100,9 +104,15 @@ function adaptation_objective(
 end
 
 function adaptation_objective(
-    adaptor::AcceptanceRate, ::AbstractVector, ::AbstractVector, acceptance_rate
+    adaptor::AcceptanceRateCtrl, ::AbstractVector, ::AbstractVector, acceptance_rate, esjd
 )
     return (acceptance_rate - adaptor.target_acceptance_rate)^2
+end
+
+function adaptation_objective(
+    ::ESJDMax, ::AbstractVector, ::AbstractVector, acceptance_rate, esjd
+)
+    return -esjd
 end
 
 function find_feasible_point(f, x0::Real, stepsize::Real, lb::Real)
