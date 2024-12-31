@@ -162,24 +162,24 @@ function approx_exact_linesearch(f, x::Real, t0::Real, dir::Real)
     d  = dir
     t  = t0
     y  = f(x)
-    y′ = f(x + t*d)
+    y′ = f(x + t * d)
     α  = β
 
     n_evals = 2
 
     if y′ ≤ y
-        α = 1/β
+        α = 1 / β
     end
 
     while true
-        t = α*t
+        t = α * t
         y = y′
-        y′ = f(x + t*d)
+        y′ = f(x + t * d)
 
         n_evals += 1
 
         if y′ ≥ y
-           break 
+            break
         end
     end
 
@@ -189,14 +189,14 @@ function approx_exact_linesearch(f, x::Real, t0::Real, dir::Real)
         y′, y = y, y′
 
         while true
-            t = α*t
+            t = α * t
             y = y′
-            y′ = f(x + t*d)
+            y′ = f(x + t * d)
 
             n_evals += 1
 
             if y′ > y
-                break 
+                break
             end
         end
     end

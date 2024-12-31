@@ -124,7 +124,7 @@ function adapt_sampler(
             sampler′ = @set sampler′.stepsizes[1] = exp(only(ℓh′))
         end
         _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-        adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub)
+        return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub)
     end
 
     # ℓh_range = range(log(1e-20), log(1); length=256)
@@ -146,30 +146,23 @@ function adapt_sampler(
         # Approximate gradient
         # Backward difference tests on a smaller stepsize so proabbly more stable:
         # We know that ℓh is feasible but ℓh + δ may not be.
-        δ     = 1e-5
-        ∇obj = (obj(ℓh) - obj(ℓh - δ)) / δ 
+        δ = 1e-5
+        ∇obj = (obj(ℓh) - obj(ℓh - δ)) / δ
 
-        stepsize, n_evals_aels =  approx_exact_linesearch(obj, ℓh, 1.0, -∇obj)
+        stepsize, n_evals_aels = approx_exact_linesearch(obj, ℓh, 1.0, -∇obj)
 
         # Perform gradient descent
-        ℓh = ℓh - stepsize*∇obj
+        ℓh = ℓh - stepsize * ∇obj
 
         ℓh_gd = ℓh
 
         ## Refine with golden section search
         ℓh_lower, ℓh_upper = ℓh - 2, ℓh + 2
         n_max_iters        = 64
-        ℓh, n_gss_iters    =
-            golden_section_search(obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2)
+        ℓh, n_gss_iters    = golden_section_search(obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2)
 
         h     = exp(ℓh)
-        stats = (
-            feasible_init_objective_evaluations = n_feasible_evals,
-            linesearch_objective_evaluations    = n_evals_aels,
-            golden_section_search_iterations    = n_gss_iters,
-            ula_stepsize                        = h,
-            
-        )
+        stats = (feasible_init_objective_evaluations = n_feasible_evals, linesearch_objective_evaluations    = n_evals_aels, golden_section_search_iterations    = n_gss_iters, ula_stepsize                        = h)
 
         sampler = @set sampler.stepsizes[1] = h
         sampler = @set sampler.stepsizes[t] = h
@@ -188,12 +181,13 @@ function adapt_sampler(
         ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
         n_max_iters        = 64
 
-        ℓh, n_gss_iters =
-            golden_section_search(obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2)
+        ℓh, n_gss_iters = golden_section_search(
+            obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2
+        )
 
         h       = exp(ℓh)
         sampler = @set sampler.stepsizes[t] = h
-        stats   = (golden_section_search_iterations = n_gss_iters, ula_stepsize = h)
+        stats   = (golden_section_search_iterations=n_gss_iters, ula_stepsize=h)
 
         # Plots.vline!([ℓh]) |> display
         # if readline() == "n"

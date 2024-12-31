@@ -96,7 +96,7 @@ function adapt_sampler(
     function obj(ℓh′)
         rng_fixed = copy(rng)
         _, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-        adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α)
+        return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α)
     end
 
     if t == 2
@@ -110,51 +110,41 @@ function adapt_sampler(
         # Approximate gradient
         # Backward difference tests on a smaller stepsize so proabbly more stable:
         # We know that ℓh is feasible but ℓh + δ may not be.
-        δ     = 1e-5
-        ∇obj = (obj(ℓh) - obj(ℓh - δ)) / δ 
+        δ = 1e-5
+        ∇obj = (obj(ℓh) - obj(ℓh - δ)) / δ
 
-        stepsize, n_evals_aels =  approx_exact_linesearch(obj, ℓh, 1.0, -∇obj)
+        stepsize, n_evals_aels = approx_exact_linesearch(obj, ℓh, 1.0, -∇obj)
 
         # Perform gradient descent
-        ℓh = ℓh - stepsize*∇obj
+        ℓh = ℓh - stepsize * ∇obj
 
         ## Refine with golden section search
         ℓh_lower, ℓh_upper = ℓh - 2, ℓh + 2
         n_max_iters        = 64
-        ℓh, n_gss_iters    =
-            golden_section_search(obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2)
+        ℓh, n_gss_iters    = golden_section_search(obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2)
 
         h = exp(ℓh)
 
         _, α = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
 
-        sampler  = @set sampler.stepsizes[t] = h
-        stats    = (
-            feasible_init_objective_evaluations = n_feasible_evals,
-            linesearch_objective_evaluations    = n_evals_aels,
-            golden_section_search_iterations    = n_gss_iters,
-            mala_stepsize                       = h,
-            acceptance_rate                     = α,
-        )
+        sampler = @set sampler.stepsizes[t] = h
+        stats   = (feasible_init_objective_evaluations = n_feasible_evals, linesearch_objective_evaluations    = n_evals_aels, golden_section_search_iterations    = n_gss_iters, mala_stepsize                       = h, acceptance_rate                     = α)
         return sampler, stats
     else
         ℓh_prev            = log(sampler.stepsizes[t - 1])
         ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
         n_max_iters        = 64
 
-        ℓh, n_gss_iters =
-            golden_section_search(obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2)
+        ℓh, n_gss_iters = golden_section_search(
+            obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2
+        )
 
         h = exp(ℓh)
 
         _, α = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
 
-        sampler  = @set sampler.stepsizes[t] = h
-        stats    = (
-            golden_section_search_iterations = n_gss_iters,
-            mala_stepsize                    = h,
-            acceptance_rate                  = α,
-        )
+        sampler = @set sampler.stepsizes[t] = h
+        stats   = (golden_section_search_iterations = n_gss_iters, mala_stepsize                    = h, acceptance_rate                  = α)
         return sampler, stats
     end
 end
