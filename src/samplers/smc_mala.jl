@@ -16,7 +16,7 @@ function SMCMALA(
     n_steps::Int,
     backward::DetailedBalance,
     precond::AbstractMatrix,
-    adaptor::AbstractAdaptor,
+    adaptor::AcceptanceRate,
 )
     stepsizes = Fill(stepsize, n_steps)
     return SMCMALA{typeof(stepsizes),typeof(backward),typeof(precond),typeof(adaptor)}(
@@ -29,8 +29,8 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
 
     μ_fwd  = gradient_flow_euler(πt, x, h, Γ)
     x_prop = μ_fwd + sqrt(2 * h) * unwhiten(Γ, randn(rng, eltype(μ_fwd), size(μ_fwd)))
-    
-    μ_bwd  = gradient_flow_euler(πt, x_prop, h, Γ)
+
+    μ_bwd = gradient_flow_euler(πt, x_prop, h, Γ)
 
     ℓπt_prop = LogDensityProblems.logdensity(πt, x_prop)
     ℓπt      = LogDensityProblems.logdensity(πt, x)
@@ -46,26 +46,26 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
 
     x_next = mapreduce(hcat, 1:size(x, 2)) do n
         if ℓα[n] > ℓu[n]
-            x_prop[:,n]
+            x_prop[:, n]
         else
-            x[:,n]
+            x[:, n]
         end
     end
     α = exp(logsumexp(ℓα) - log(n_particles))
-    x_next, α
+    return x_next, α
 end
 
 function potential(::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix)
     ℓπt_xtm1   = LogDensityProblems.logdensity(πt, xtm1)
     ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
-    ℓπt_xtm1 - ℓπtm1_xtm1
+    return ℓπt_xtm1 - ℓπtm1_xtm1
 end
 
 function mutate_with_potential(
     rng::Random.AbstractRNG, sampler::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix
 )
     (; stepsizes, precond) = sampler
-    ht, Γ       = stepsizes[t], precond
+    ht, Γ = stepsizes[t], precond
 
     xt, _ = transition_mala(rng, ht, Γ, πt, xtm1)
     ℓG    = potential(sampler, t, πt, πtm1, xtm1)
@@ -78,7 +78,8 @@ function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCMALA,
     t::Int,
-    path::AbstractPath,
+    πt,
+    πtm1,
     xtm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
@@ -86,16 +87,14 @@ function adapt_sampler(
         return sampler, NamedTuple()
     end
 
-    if t == length(sampler.stepsizes)
-        sampler = @set sampler.stepsizes[t] = sampler.stepsizes[t - 1]
-        return sampler, NamedTuple()
-    end
+    # Subsample particles to reduce adaptation overhead
+    n_particles = size(xtm1, 2)
+    idx_sub     = StatsBase.sample(1:n_particles, sampler.adaptor.n_subsample; replace=false)
+    xtm1_sub    = xtm1[:, idx_sub]
 
-    Γ    = sampler.precond
-    πtm1 = get_target(path, t - 1)
-    πt   = get_target(path, t)
-    πtp1 = get_target(path, t + 1)
+    Γ = sampler.precond
 
+    # Set online optimization algorithm configurations
     ℓh_lower, ℓh_upper = if t == 2
         log(1e-8), log(10)
     else
@@ -103,43 +102,19 @@ function adapt_sampler(
         ℓh_prev - 1, ℓh_prev + 1
     end
 
-    n_max_iters = (t == 1) ? 64 : 16
+    n_max_iters = (t == 2) ? 64 : 16
 
-    # obj = map(range(ℓh_lower, ℓh_upper; length=32)) do ℓh′
-    #     rng_fixed = copy(rng)
-    #     h′    = exp(ℓh′)
-    #     xt, _ = transition_mala(rng_fixed, h′, Γ, πt, xtm1)
-    #     ℓGt   = potential(sampler, t, πt, πtm1, xtm1)
-    #     ℓGtp1 = potential(sampler, t+1, πtp1, πt, xt)
-    #     ℓwt   = ℓwtm1 + ℓGt 
-    #     adaptation_objective(sampler.adaptor, ℓwt, ℓGtp1)
-    # end
-    # Plots.plot(range(ℓh_lower, ℓh_upper; length=32), obj) |> display
-
-    ℓh, n_gss_iters = golden_section_search(
-        ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2
-    ) do ℓh′
-        rng_fixed = copy(rng)
-        h′    = exp(ℓh′)
-        xt, α = transition_mala(rng_fixed, h′, Γ, πt, xtm1)
-        ℓGt   = potential(sampler, t, πt, πtm1, xtm1)
-        ℓGtp1 = potential(sampler, t+1, πtp1, πt, xt)
-        ℓwt   = ℓwtm1 + ℓGt 
-        adaptation_objective(sampler.adaptor, ℓwt, ℓGtp1, α)
-    end
-
-    # Plots.vline!([ℓh]) |> display
-    # println(ℓh)
-
-    # if readline() == "n"
-    #     throw()
-    # end
+    # Solve optimization problem
+    ℓh, n_gss_iters =
+        golden_section_search(ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2) do ℓh′
+            rng_fixed = copy(rng)
+            h′ = exp(ℓh′)
+            _, α = transition_mala(rng_fixed, h′, Γ, πt, xtm1_sub)
+            adaptation_objective(sampler.adaptor, ℓwtm1, ℓwtm1, α)
+        end
 
     h       = exp(ℓh)
     sampler = @set sampler.stepsizes[t] = exp(ℓh)
-    stats   = (
-        golden_section_search_iterations = n_gss_iters,
-        mala_stepsize                    = h
-    )
+    stats   = (golden_section_search_iterations = n_gss_iters, mala_stepsize                    = h)
     return sampler, stats
 end

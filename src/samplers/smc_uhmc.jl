@@ -52,3 +52,59 @@ function mutate_with_potential(
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
     return vcat(xt, vt), ℓG, NamedTuple()
 end
+
+function adapt_sampler(
+    rng::Random.AbstractRNG,
+    sampler::SMCUHMC,
+    t::Int,
+    πt,
+    πtm1,
+    xtm1::AbstractMatrix,
+    ℓwtm1::AbstractVector,
+)
+    if sampler.adaptor isa NoAdaptation
+        return sampler, NamedTuple()
+    end
+
+    # Subsample particles to reduce adaptation overhead
+    n_particles = size(xtm1, 2)
+    idx_sub     = StatsBase.sample(
+        1:n_particles, sampler.adaptor.n_subsample; replace=false
+    )
+    xtm1_sub  = xtm1[:,idx_sub]
+    ℓwtm1_sub = ℓwtm1[idx_sub]
+
+    # Set online optimization algorithm configurations
+    ℓh_lower, ℓh_upper = if t == 2
+        log(1e-8), log(10)
+    else
+        ℓh_prev = log(sampler.stepsizes[t - 1])
+        ℓh_prev - 1, ℓh_prev + 1
+    end
+    n_max_iters = (t == 2) ? 64 : 16
+
+    # Solve optimization problem
+    ℓh, n_gss_iters = golden_section_search(
+        ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2
+    ) do ℓh′
+        rng_fixed = copy(rng)
+        sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
+
+        # If t == 2, also optimize the stepsize at t = 1.
+        # For simplicity, we just set h[1] = h[2], which is suboptimal,
+        # but shouldn't be too critical.
+        if t == 2
+            sampler′ = @set sampler.stepsizes[1] = exp(ℓh′)
+        end
+        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
+        adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub)
+    end
+
+    h       = exp(ℓh)
+    sampler = @set sampler.stepsizes[t] = exp(ℓh)
+    stats   = (
+        golden_section_search_iterations = n_gss_iters,
+        ula_stepsize                     = h
+    )
+    return sampler, stats
+end

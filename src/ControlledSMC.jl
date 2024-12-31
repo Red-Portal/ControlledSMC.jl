@@ -16,6 +16,7 @@ using ProgressMeter
 using Random
 using ReverseDiff
 using Statistics
+using StatsBase
 using UnicodePlots
 
 abstract type AbstractSMC end
