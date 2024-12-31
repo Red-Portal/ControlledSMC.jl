@@ -58,7 +58,7 @@ function sample(
     target_prev = get_target(path, 1)
     for t in 2:n_iters
         target        = get_target(path, t)
-        sampler, stat = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
+        sampler, stat = adapt_sampler(rng, sampler, t, path, x, ℓw)
         x, ℓG, aux    = mutate_with_potential(rng, sampler, t, target, target_prev, x)
 
         stat′ = log_potential_moments(ℓw, ℓG)

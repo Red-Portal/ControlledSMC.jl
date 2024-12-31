@@ -15,11 +15,15 @@ struct AnnealedFlowTransport <: AbstractAdaptor end
 
 struct LogPotentialVarianceMin <: AbstractAdaptor end
 
+struct AcceptanceRate <: AbstractAdaptor
+    target_acceptance_rate
+end
+
 struct CondESSMax <: AbstractAdaptor end
 
 adaptation_objective(::NoAdaptation, ::AbstractVector, ::AbstractVector) = 0.0
 
-function adaptation_objective(::ForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector)
+function adaptation_objective(::ForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector, args...)
     N        = length(ℓw)
     ℓ∑w      = logsumexp(ℓw)
     ℓw_norm  = @. ℓw - ℓ∑w
@@ -30,7 +34,7 @@ function adaptation_objective(::ForwardKLMin, ℓw::AbstractVector, ℓG::Abstra
     return dot(w′_norm, ℓG) - ℓEw′
 end
 
-function adaptation_objective(::BackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector)
+function adaptation_objective(::BackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector, args...)
     N        = length(ℓw)
     ℓ∑w      = logsumexp(ℓw)
     ℓw_norm  = @. ℓw - ℓ∑w
@@ -40,7 +44,7 @@ function adaptation_objective(::BackwardKLMin, ℓw::AbstractVector, ℓG::Abstr
 end
 
 function adaptation_objective(
-    ::PartialForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector
+    ::PartialForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector, args...
 )
     ℓ∑w      = logsumexp(ℓw)
     ℓw_norm  = @. ℓw - ℓ∑w
@@ -51,13 +55,13 @@ function adaptation_objective(
 end
 
 function adaptation_objective(
-    ::PartialBackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector
+    ::PartialBackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector, args...
 )
     return -mean(ℓG)
 end
 
 function adaptation_objective(
-    ::AnnealedFlowTransport, ℓw::AbstractVector, ℓG::AbstractVector
+    ::AnnealedFlowTransport, ℓw::AbstractVector, ℓG::AbstractVector, args...
 )
     ∑ℓw    = logsumexp(ℓw)
     w_norm = @. exp(ℓw - ∑ℓw)
@@ -65,7 +69,7 @@ function adaptation_objective(
 end
 
 function adaptation_objective(
-    ::CondESSMax, ℓw::AbstractVector, ℓG::AbstractVector
+    ::CondESSMax, ℓw::AbstractVector, ℓG::AbstractVector, args...
 )
     N         = length(ℓw)
     ℓ∑WG      = logsumexp(ℓw + ℓG)
@@ -75,9 +79,15 @@ function adaptation_objective(
 end
 
 function adaptation_objective(
-    ::LogPotentialVarianceMin, ℓw::AbstractVector, ℓG::AbstractVector
+    ::LogPotentialVarianceMin, ℓw::AbstractVector, ℓG::AbstractVector, args...
 )
     return var(ℓG)
+end
+
+function adaptation_objective(
+    adaptor::AcceptanceRate, ::AbstractVector, ::AbstractVector, acceptance_rate
+)
+    return (acceptance_rate - adaptor.target_acceptance_rate)^2
 end
 
 

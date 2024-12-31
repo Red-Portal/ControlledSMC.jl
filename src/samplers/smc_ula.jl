@@ -96,8 +96,7 @@ function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCULA,
     t::Int,
-    πt::Any,
-    πtm1::Any,
+    path::AbstractPath,
     xtm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
@@ -105,14 +104,17 @@ function adapt_sampler(
         return sampler, NamedTuple()
     end
 
+    πt   = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
+
     ℓh_lower, ℓh_upper = if t == 2
-        log(1e-7), log(10)
+        log(1e-8), log(10)
     else
         ℓh_prev = log(sampler.stepsizes[t - 1])
         ℓh_prev - 1, ℓh_prev + 1
     end
 
-    n_max_iters = (2 == 1) ? 64 : 16
+    n_max_iters = (t == 1) ? 64 : 16
 
     ℓh, n_gss_iters = golden_section_search(
         ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2
@@ -120,7 +122,9 @@ function adapt_sampler(
         rng_fixed = copy(rng)
         sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
 
-        # If t == 2, also optimize the stepsize at t = 1
+        # If t == 2, also optimize the stepsize at t = 1.
+        # For simplicity, we just set h[1] = h[2], which is suboptimal,
+        # but shouldn't be too critical.
         if t == 2
             sampler′ = @set sampler.stepsizes[1] = exp(ℓh′)
         end
