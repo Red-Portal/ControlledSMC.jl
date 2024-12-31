@@ -72,8 +72,6 @@ function mutate_with_potential(
     return xt, ℓG, NamedTuple()
 end
 
-using Plots
-
 function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCMALA,
@@ -89,32 +87,74 @@ function adapt_sampler(
 
     # Subsample particles to reduce adaptation overhead
     n_particles = size(xtm1, 2)
-    idx_sub     = StatsBase.sample(1:n_particles, sampler.adaptor.n_subsample; replace=false)
+    idx_sub     = StatsBase.sample(rng, 1:n_particles, sampler.adaptor.n_subsample; replace=false)
     xtm1_sub    = xtm1[:, idx_sub]
+    ℓwtm1_sub   = ℓwtm1[idx_sub]
 
     Γ = sampler.precond
 
-    # Set online optimization algorithm configurations
-    ℓh_lower, ℓh_upper = if t == 2
-        log(1e-8), log(10)
-    else
-        ℓh_prev = log(sampler.stepsizes[t - 1])
-        ℓh_prev - 1, ℓh_prev + 1
+    function obj(ℓh′)
+        rng_fixed = copy(rng)
+        _, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
+        adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α)
     end
 
-    n_max_iters = (t == 2) ? 64 : 16
+    if t == 2
+        ℓh0 = 0.0
+        r   = 0.5
 
-    # Solve optimization problem
-    ℓh, n_gss_iters =
-        golden_section_search(ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2) do ℓh′
-            rng_fixed = copy(rng)
-            h′ = exp(ℓh′)
-            _, α = transition_mala(rng_fixed, h′, Γ, πt, xtm1_sub)
-            adaptation_objective(sampler.adaptor, ℓwtm1, ℓwtm1, α)
-        end
+        ## Find any point that is not degenerate
+        ℓh, n_feasible_evals = find_feasible_point(obj, ℓh0, log(r), log(1e-10))
 
-    h       = exp(ℓh)
-    sampler = @set sampler.stepsizes[t] = exp(ℓh)
-    stats   = (golden_section_search_iterations = n_gss_iters, mala_stepsize                    = h)
-    return sampler, stats
+        ## One-step of gradient descent with line-search
+        # Approximate gradient
+        # Backward difference tests on a smaller stepsize so proabbly more stable:
+        # We know that ℓh is feasible but ℓh + δ may not be.
+        δ     = 1e-5
+        ∇obj = (obj(ℓh) - obj(ℓh - δ)) / δ 
+
+        stepsize, n_evals_aels =  approx_exact_linesearch(obj, ℓh, 1.0, -∇obj)
+
+        # Perform gradient descent
+        ℓh = ℓh - stepsize*∇obj
+
+        ## Refine with golden section search
+        ℓh_lower, ℓh_upper = ℓh - 2, ℓh + 2
+        n_max_iters        = 64
+        ℓh, n_gss_iters    =
+            golden_section_search(obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2)
+
+        h = exp(ℓh)
+
+        _, α = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
+
+        sampler  = @set sampler.stepsizes[t] = h
+        stats    = (
+            feasible_init_objective_evaluations = n_feasible_evals,
+            linesearch_objective_evaluations    = n_evals_aels,
+            golden_section_search_iterations    = n_gss_iters,
+            mala_stepsize                       = h,
+            acceptance_rate                     = α,
+        )
+        return sampler, stats
+    else
+        ℓh_prev            = log(sampler.stepsizes[t - 1])
+        ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
+        n_max_iters        = 64
+
+        ℓh, n_gss_iters =
+            golden_section_search(obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2)
+
+        h = exp(ℓh)
+
+        _, α = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
+
+        sampler  = @set sampler.stepsizes[t] = h
+        stats    = (
+            golden_section_search_iterations = n_gss_iters,
+            mala_stepsize                    = h,
+            acceptance_rate                  = α,
+        )
+        return sampler, stats
+    end
 end

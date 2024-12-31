@@ -3,10 +3,10 @@ module ControlledSMC
 
 using ADTypes
 using Accessors
+using DataInterpolations
 using DifferentiationInterface
 using Distributions
 using FillArrays
-using DataInterpolations
 using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
