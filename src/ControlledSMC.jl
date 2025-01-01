@@ -72,6 +72,9 @@ export SMCULA
 include("samplers/smc_mala.jl")
 export SMCMALA
 
+include("samplers/smc_ubarker.jl")
+export SMCUBarker
+
 include("samplers/smc_barker.jl")
 export SMCBarker
 
