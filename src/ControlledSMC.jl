@@ -3,14 +3,15 @@ module ControlledSMC
 
 using ADTypes
 using Accessors
-using DataInterpolations
 using DifferentiationInterface
 using Distributions
 using FillArrays
+using ForwardDiff
+using Interpolations
 using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
-using Optim
+using Optim, LineSearches
 using PDMats
 using ProgressMeter
 using Random
