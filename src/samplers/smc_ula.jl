@@ -58,16 +58,23 @@ function potential_with_backward(
     xtm1::AbstractMatrix,
 )
     (; stepsizes, precond) = sampler
-    ht, htm1, Γ = stepsizes[t], stepsizes[t - 1], precond
-    ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
+
+    ht, Γ  = stepsizes[t], precond
     ℓπt_xt = LogDensityProblems.logdensity(πt, xt)
-    q_fwd = gradient_flow_euler(πt, xtm1, ht, Γ)
-    q_bwd = gradient_flow_euler(πtm1, xt, htm1, Γ)
-    K = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
-    L = MvNormal.(eachcol(q_bwd), Ref(2 * htm1 * Γ))
-    ℓk = logpdf.(K, eachcol(xt))
-    ℓl = logpdf.(L, eachcol(xtm1))
-    return ℓπt_xt + ℓl - ℓπtm1_xtm1 - ℓk
+    q_fwd  = gradient_flow_euler(πt, xtm1, ht, Γ)
+    K      = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
+    ℓk     = logpdf.(K, eachcol(xt))
+
+    if t == 2
+        return ℓπt_xt - ℓk
+    else
+        htm1       = stepsizes[t - 1]
+        ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
+        q_bwd      = gradient_flow_euler(πtm1, xt, htm1, Γ)
+        L          = MvNormal.(eachcol(q_bwd), Ref(2 * htm1 * Γ))
+        ℓl         = logpdf.(L, eachcol(xtm1))
+        return ℓπt_xt + ℓl - ℓπtm1_xtm1 - ℓk
+    end
 end
 
 function potential_with_backward(
@@ -80,16 +87,22 @@ function potential_with_backward(
     xtm1::AbstractMatrix,
 )
     (; stepsizes, precond) = sampler
-    ht, Γ = stepsizes[t], precond
-    ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
+
+    ht, Γ  = stepsizes[t], precond
     ℓπt_xt = LogDensityProblems.logdensity(πt, xt)
-    q_fwd = gradient_flow_euler(πt, xtm1, ht, Γ)
-    q_bwd = gradient_flow_euler(πt, xt, ht, Γ)
-    K = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
-    L = MvNormal.(eachcol(q_bwd), Ref(2 * ht * Γ))
-    ℓK = logpdf.(K, eachcol(xt))
-    ℓL = logpdf.(L, eachcol(xtm1))
-    return ℓπt_xt + ℓL - ℓπtm1_xtm1 - ℓK
+    q_fwd  = gradient_flow_euler(πt, xtm1, ht, Γ)
+    K      = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
+    ℓk     = logpdf.(K, eachcol(xt))
+
+    if t == 2
+        return ℓπt_xt - ℓk
+    else
+        ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
+        q_bwd      = gradient_flow_euler(πt, xt, ht, Γ)
+        L          = MvNormal.(eachcol(q_bwd), Ref(2 * ht * Γ))
+        ℓl         = logpdf.(L, eachcol(xtm1))
+        return ℓπt_xt + ℓl - ℓπtm1_xtm1 - ℓk
+    end
 end
 
 using Plots
@@ -113,62 +126,55 @@ function adapt_sampler(
     xtm1_sub    = xtm1[:, idx_sub]
     ℓwtm1_sub   = ℓwtm1[idx_sub]
 
-    # ℓh_range = range(log(1e-20), log(1); length=256)
-    # obj_range = map(ℓh_range) do ℓh′
-    #     obj(ℓh′)
-    # end
-    # Plots.plot(ℓh_range, obj_range) |> display
-
     if t == 2
-        function obj_init(ℓh12)
+        function obj_init(ℓh′)
             rng_fixed = copy(rng)
-            sampler′ = @set sampler.stepsizes[1] = exp(ℓh12[1])
-            sampler′ = @set sampler′.stepsizes[2] = exp(ℓh12[2])
+            sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub)
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
+                   0.01 * abs2(ℓh′)
         end
 
-        ℓh_init = 0.0
-        r       = 0.5
+        ℓh_lower_guess = -20.0
 
-        # Find any point that is not degenerate
-        ℓh_init, n_feasible_evals = find_feasible_point(
-            ℓh′ -> obj_init([ℓh′, ℓh′]), ℓh_init, log(r), log(1e-10)
+        ## Find any point between 1e-10 and 2e-16 that is not degenerate
+        ℓh_decrease_stepsize = log(0.5)
+        ℓh_lower, n_feasible_evals = find_feasible_point(
+            obj_init, ℓh_lower_guess, ℓh_decrease_stepsize, log(eps(Float64))
+        )
+
+        ## Find remaining endpoint of an interval containing a (possibly local) minima
+        ℓh_upper_increase_ratio = (1 + √5) / 2
+        n_interval_max_iters = ceil(Int, log(ℓh_upper_increase_ratio, 40))
+        ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
+            obj_init, ℓh_lower, ℓh_upper_increase_ratio, 1; n_max_iters=n_interval_max_iters
         )
 
         # Properly optimize the objective
-        res = Optim.optimize(
-            obj_init,
-            [ℓh_init, ℓh_init],
-            GradientDescent(),
-            Optim.Options(; x_tol=1e-2, iterations=30),
-        )
-        ℓh12 = Optim.minimizer(res)
+        ℓh, n_gss_iters = golden_section_search(obj_init, ℓh_lower, ℓh_upper; abstol=1e-2)
+        h = exp(ℓh)
 
         stats = (
-            initialization_objective_evaluations   = n_feasible_evals,
-            gradient_descent_objective_evaluations = Optim.f_calls(res),
-            ula_stepsize                           = exp(ℓh12[2]),
+            feasible_search_objective_evaluations       = n_feasible_evals,
+            initialization_objective_evaluations        = n_interval_evals,
+            golden_section_search_objective_evaluations = n_gss_iters,
+            ula_stepsize                                = h,
         )
-
-        sampler = @set sampler.stepsizes[1] = exp(ℓh12[1])
-        sampler = @set sampler.stepsizes[2] = exp(ℓh12[2])
+        sampler = @set sampler.stepsizes[2] = h
         return sampler, stats
     else
-        function obj(ℓh′)
-            rng_fixed = copy(rng)
-            sampler′ = @set sampler.stepsizes[t] = exp(only(ℓh′))
-            _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub)
-        end
-
         ℓh_prev            = log(sampler.stepsizes[t - 1])
         ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
-        n_max_iters        = 64
 
-        ℓh, n_gss_iters = golden_section_search(
-            obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2
-        )
+        function obj(ℓh′)
+            rng_fixed = copy(rng)
+            sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
+            _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
+                   0.01 * abs2(ℓh′ - ℓh_prev)
+        end
+
+        ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=1e-2)
 
         h       = exp(ℓh)
         sampler = @set sampler.stepsizes[t] = h

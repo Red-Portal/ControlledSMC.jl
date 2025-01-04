@@ -4,9 +4,10 @@ struct SMCMALA{
     Precond<:AbstractMatrix,
     Adaptor<:AbstractAdaptor,
 } <: AbstractSMC
-    stepsizes :: Stepsizes
-    precond   :: Precond
-    adaptor   :: Adaptor
+    stepsizes    :: Stepsizes
+    precond      :: Precond
+    adaptor      :: Adaptor
+    n_mcmc_steps :: Int
 end
 
 function SMCMALA(
@@ -14,10 +15,11 @@ function SMCMALA(
     n_steps::Int,
     precond::AbstractMatrix,
     adaptor::Union{<:NoAdaptation, <:AcceptanceRateCtrl, <:ESJDMax},
+    n_mcmc_steps::Int = 1
 )
     stepsizes = Fill(stepsize, n_steps)
     return SMCMALA{typeof(stepsizes),typeof(precond),typeof(adaptor)}(
-        stepsizes, precond, adaptor
+        stepsizes, precond, adaptor, n_mcmc_steps
     )
 end
 
@@ -61,11 +63,14 @@ end
 function mutate_with_potential(
     rng::Random.AbstractRNG, sampler::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix
 )
-    (; stepsizes, precond) = sampler
+    (; stepsizes, precond, n_mcmc_steps) = sampler
     ht, Γ = stepsizes[t], precond
 
-    xt, _ = transition_mala(rng, ht, Γ, πt, xtm1)
-    ℓG    = potential(sampler, t, πt, πtm1, xtm1)
+    xt = xtm1
+    for _ in 1:n_mcmc_steps
+        xt, _ = transition_mala(rng, ht, Γ, πt, xt)
+    end
+    ℓG = potential(sampler, t, πt, πtm1, xtm1)
     return xt, ℓG, NamedTuple()
 end
 
@@ -90,7 +95,6 @@ function adapt_sampler(
 
     Γ = sampler.precond
 
-
     if t == 2
         function obj_init(ℓh′)
             rng_fixed = copy(rng)
@@ -100,38 +104,34 @@ function adapt_sampler(
                 0.01*abs2(ℓh′)
         end
 
-        ℓh_lower_guess = log(1e-10)
+        ℓh_lower_guess = -20.0
 
         ## Find any point between 1e-10 and 2e-16 that is not degenerate
-        r = 0.5
+        ℓh_decrease_stepsize = log(0.5)
         ℓh_lower, n_feasible_evals = find_feasible_point(
-            obj_init, ℓh_lower_guess, log(r), log(eps(Float64))
+            obj_init, ℓh_lower_guess, ℓh_decrease_stepsize, log(eps(Float64))
         )
-
-        #ℓh_range  = range(-30, 30; length=256)
-        #obj_range = map(obj, ℓh_range)
-        #display(Plots.plot(ℓh_range, obj_range))
 
         ## Find an interval that contains a (possibly local) minima
+        ℓh_upper_increase_ratio = (1 + √5)/2
+        n_interval_max_iters    = ceil(Int, log(ℓh_upper_increase_ratio, 40))
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
-            obj_init, ℓh_lower, (1 + √5)/2, 1, n_max_iters=8
+            obj_init, ℓh_lower, ℓh_upper_increase_ratio, 1, n_max_iters=n_interval_max_iters
         )
 
-        n_gss_max_iters = 64
+        ## Properly optimize objective
+        gss_abstol = 1e-2
         ℓh, n_gss_iters = golden_section_search(
-            obj_init, ℓh_lower, ℓh_upper; n_max_iters=n_gss_max_iters, abstol=1e-2
+            obj_init, ℓh_lower, ℓh_upper; abstol=gss_abstol,
         )
         h = exp(ℓh)
-
-        #display(Plots.vline!([ℓh_lower, ℓh_upper]))
-        #display(Plots.vline!([ℓh]))
 
         _, α = transition_mala(rng, h, Γ, πt, xtm1_sub)
 
         stats = (
             feasible_lowerbound_search_obj_evals = n_feasible_evals,
             bracketing_interval_search_obj_evals = n_interval_evals,
-            goden_section_search_iters           = n_gss_iters,
+            golden_section_search_iters          = n_gss_iters,
             ula_stepsize                         = h,
         )
         sampler = @set sampler.stepsizes[t] = exp(ℓh)
@@ -139,7 +139,6 @@ function adapt_sampler(
     else
         ℓh_prev            = log(sampler.stepsizes[t - 1])
         ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
-        n_max_iters        = 64
 
         function obj(ℓh′)
             rng_fixed = copy(rng)
@@ -149,10 +148,8 @@ function adapt_sampler(
                 0.01*abs2(ℓh′ - ℓh_prev)
         end
 
-        ℓh, n_gss_iters = golden_section_search(
-            obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2
-        )
-
+        gss_abstol = 1e-2
+        ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=gss_abstol)
         h = exp(ℓh)
 
         _, α = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)

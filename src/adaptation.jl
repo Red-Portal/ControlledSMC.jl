@@ -137,10 +137,10 @@ function find_feasible_point(f, x0::Real, stepsize::Real, lb::Real)
     )
 end
 
-function golden_section_search(f, a::Real, b::Real; n_max_iters::Int=10, abstol::Real=1e-2)
+function golden_section_search(f, a::Real, b::Real; abstol::Real=1e-2)
     ϕinv    = (√5 - 1) / 2
     n_iters = 0
-    for t in 1:n_max_iters
+    while true
         c = b - (b - a) * ϕinv
         d = a + (b - a) * ϕinv
 
@@ -149,8 +149,6 @@ function golden_section_search(f, a::Real, b::Real; n_max_iters::Int=10, abstol:
         else
             a = c
         end
-
-        n_iters = t
 
         if (b - a) ≤ abstol
             break
@@ -163,16 +161,14 @@ function golden_section_search(f, a::Real, b::Real; n_max_iters::Int=10, abstol:
                 ),
             )
         end
+
+        n_iters += 1
     end
     return (b + a) / 2, n_iters
 end
 
 function find_golden_section_search_interval(
-    f,
-    a::Real,
-    ρ::Real,
-    dir::Real;
-    n_max_iters::Int=10,
+    f, a::Real, ρ::Real, dir::Real; n_max_iters::Int=10
 )
     @assert ρ > 1
 
@@ -180,17 +176,19 @@ function find_golden_section_search_interval(
     y = f(a)
     k = 0
     while k ≤ n_max_iters
-        b = a + dir*ρ^k
+        b = a + dir * ρ^k
         y′ = f(b)
         if y < y′
             break
+        elseif !isfinite(y′)
+            @warn "Degenerate objective value f(x) = $y′ for x = $b encountered during golden section search initial interval search."
+            return a + dir * ρ^(k - 1), a + dir * ρ^(k - 2), k
         end
-        y  = y′
+        y = y′
         k += 1
     end
-    return a + dir*ρ^k, a + dir*ρ^(k - 1), k
+    return a + dir * ρ^k, a + dir * ρ^(k - 1), k
 end
-
 
 LineSearches.@with_kw struct ApproximatelyExactLineSearch{TI,TB} <:
                              LineSearches.AbstractLineSearch
@@ -233,7 +231,7 @@ function (ls::ApproximatelyExactLineSearch)(
         if n_evals > n_max_evals
             throw(
                 Optim.LineSearchException(
-                    "Linesearch failed to converge, reached maximum iterations $(n_max_evals).", 
+                    "Linesearch failed to converge, reached maximum iterations $(n_max_evals).",
                 ),
             )
         end
