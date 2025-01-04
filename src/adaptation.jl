@@ -125,8 +125,8 @@ function find_feasible_point(f, x0::Real, stepsize::Real, lb::Real)
         if isfinite(y)
             return x, n_eval
         else
-            x      -= stepsize
-            y      = f(x)
+            x -= stepsize
+            y = f(x)
             n_eval += 1
         end
     end
@@ -167,13 +167,55 @@ function golden_section_search(f, a::Real, b::Real; n_max_iters::Int=10, abstol:
     return (b + a) / 2, n_iters
 end
 
-function approx_exact_linesearch(f, x, t0::Real, dir)
-    β  = 0.9 #2/(1 + √5)
-    d  = dir
-    t  = t0
-    y  = f(x)
-    y′ = f(x + t * d)
-    α  = β
+function find_golden_section_search_interval(
+    f,
+    a::Real,
+    ρ::Real,
+    dir::Real;
+    n_max_iters::Int=10,
+)
+    @assert ρ > 1
+
+    b = a
+    y = f(a)
+    k = 0
+    while k ≤ n_max_iters
+        b = a + dir*ρ^k
+        y′ = f(b)
+        if y < y′
+            break
+        end
+        y  = y′
+        k += 1
+    end
+    return a + dir*ρ^k, a + dir*ρ^(k - 1), k
+end
+
+
+LineSearches.@with_kw struct ApproximatelyExactLineSearch{TI,TB} <:
+                             LineSearches.AbstractLineSearch
+    iterations::TI = 1_000
+    beta::TB = 2 / (1 + √5)
+end
+
+function (ls::ApproximatelyExactLineSearch)(
+    df::LineSearches.AbstractObjective,
+    x::AbstractArray{T},
+    s::AbstractArray{T},
+    t0::Tt=real(T)(1),
+    x_new::AbstractArray{T}=similar(x),
+    ϕ_0=nothing,
+    dϕ_0=nothing,
+) where {T,Tt}
+    β           = ls.beta
+    n_max_evals = ls.iterations
+
+    ϕ, _ = LineSearches.make_ϕ_dϕ(df, x_new, x, s)
+
+    t = t0 / β
+    y = isnothing(ϕ_0) ? ϕ(zero(t0)) : ϕ_0
+    y′ = ϕ(t)
+    α = β
 
     n_evals = 2
 
@@ -181,18 +223,27 @@ function approx_exact_linesearch(f, x, t0::Real, dir)
         α = 1 / β
     end
 
+    # Increase/decrease the step size as long as the objective is decreasing
     while true
         t = α * t
         y = y′
-        y′ = f(x + t * d)
+        y′ = ϕ(t)
 
         n_evals += 1
+        if n_evals > n_max_evals
+            throw(
+                Optim.LineSearchException(
+                    "Linesearch failed to converge, reached maximum iterations $(n_max_evals).", 
+                ),
+            )
+        end
 
-        if y′ ≥ y
+        if isfinite(y) && y′ ≥ y
             break
         end
     end
 
+    # If increasing the step size failed, try decreasing it
     if t ≈ t0 / β
         t = t0
         α = β
@@ -201,15 +252,96 @@ function approx_exact_linesearch(f, x, t0::Real, dir)
         while true
             t = α * t
             y = y′
-            y′ = f(x + t * d)
+            y′ = ϕ(t)
 
             n_evals += 1
+            if n_evals > n_max_evals
+                throw(
+                    Optim.LineSearchException(
+                        "Linesearch failed to converge, reached maximum iterations $(n_max_evals).",
+                    ),
+                )
+            end
 
-            if y′ > y
+            if isfinite(y) && y′ > y
                 break
             end
         end
     end
 
-    return t, n_evals
+    if α < 1
+        return t, y′
+    else
+        t = β^2 * t
+        return t, ϕ(t)
+    end
 end
+
+# function approx_exact_linesearch(
+#     f, x, t0::Real, dir; beta::Real = 2/(1 + √5), n_max_evals=1_000
+# )
+#     β  = beta
+#     d  = dir
+#     t  = t0
+#     y  = f(x)
+#     y′ = f(x + t * d)
+#     α  = β
+
+#     n_evals = 2
+
+#     if y′ ≤ y
+#         α = 1 / β
+#     end
+
+#     while true
+#         t = α * t
+#         y = y′
+#         y′ = f(x + t * d)
+
+#         n_evals += 1
+#         if n_evals > n_max_evals
+#             throw(
+#                 LineSearchs.LineSearchException(
+#                     "Linesearch failed to converge, reached maximum iterations $(n_max_evals)."
+#                 )
+#             )
+#         end
+
+#         if y′ ≥ y
+#             break
+#         end
+#     end
+
+#     if t ≈ t0 / β
+#         t = t0
+#         α = β
+#         y′, y = y, y′
+
+#         while true
+#             t = α * t
+#             y = y′
+#             y′ = f(x + t * d)
+
+#             n_evals += 1
+#             if n_evals > n_max_evals
+#                 throw(
+#                     LineSearchs.LineSearchException(
+#                         "Linesearch failed to converge, reached maximum iterations $(n_max_evals)."
+#                     )
+#                 )
+#             end
+
+#             if y′ > y
+#                 break
+#             end
+#         end
+#     end
+
+#     if α < 1 
+#         return t
+#     else
+#         return β^2*t
+#     end
+
+#     return t, n_evals
+# end

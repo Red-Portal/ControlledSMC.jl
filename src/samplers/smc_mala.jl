@@ -90,36 +90,49 @@ function adapt_sampler(
 
     Γ = sampler.precond
 
-    function obj(ℓh′)
-        rng_fixed = copy(rng)
-        xt_sub, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-        esjd      = mean(sum(abs2.(xt_sub - xtm1_sub), dims=1))
-        return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd)
-    end
 
     if t == 2
-        ℓh0 = 0.0
-        r   = 0.5
+        function obj_init(ℓh′)
+            rng_fixed = copy(rng)
+            xt_sub, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
+            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub), dims=1))
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) + 
+                0.01*abs2(ℓh′)
+        end
 
-        ## Find any point that is not degenerate
-        ℓh, n_feasible_evals = find_feasible_point(obj, ℓh0, log(r), log(1e-10))
+        ℓh_lower_guess = log(1e-10)
 
-        # Properly optimize the objective
-        res = Optim.optimize(
-            params -> obj(only(params)),
-            [ℓh],
-            GradientDescent(),
-            Optim.Options(; x_tol=1e-2, iterations=30),
+        ## Find any point between 1e-10 and 2e-16 that is not degenerate
+        r = 0.5
+        ℓh_lower, n_feasible_evals = find_feasible_point(
+            obj_init, ℓh_lower_guess, log(r), log(eps(Float64))
         )
-        ℓh = Optim.minimizer(res) |> only
-        h  = exp(ℓh)
+
+        #ℓh_range  = range(-30, 30; length=256)
+        #obj_range = map(obj, ℓh_range)
+        #display(Plots.plot(ℓh_range, obj_range))
+
+        ## Find an interval that contains a (possibly local) minima
+        ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
+            obj_init, ℓh_lower, (1 + √5)/2, 1, n_max_iters=8
+        )
+
+        n_gss_max_iters = 64
+        ℓh, n_gss_iters = golden_section_search(
+            obj_init, ℓh_lower, ℓh_upper; n_max_iters=n_gss_max_iters, abstol=1e-2
+        )
+        h = exp(ℓh)
+
+        #display(Plots.vline!([ℓh_lower, ℓh_upper]))
+        #display(Plots.vline!([ℓh]))
 
         _, α = transition_mala(rng, h, Γ, πt, xtm1_sub)
 
         stats = (
-            initialization_objective_evaluations   = n_feasible_evals,
-            gradient_descent_objective_evaluations = Optim.f_calls(res),
-            ula_stepsize                           = h,
+            feasible_lowerbound_search_obj_evals = n_feasible_evals,
+            bracketing_interval_search_obj_evals = n_interval_evals,
+            goden_section_search_iters           = n_gss_iters,
+            ula_stepsize                         = h,
         )
         sampler = @set sampler.stepsizes[t] = exp(ℓh)
         return sampler, stats
@@ -127,6 +140,14 @@ function adapt_sampler(
         ℓh_prev            = log(sampler.stepsizes[t - 1])
         ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
         n_max_iters        = 64
+
+        function obj(ℓh′)
+            rng_fixed = copy(rng)
+            xt_sub, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
+            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub), dims=1))
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
+                0.01*abs2(ℓh′ - ℓh_prev)
+        end
 
         ℓh, n_gss_iters = golden_section_search(
             obj, ℓh_lower, ℓh_upper; n_max_iters, abstol=1e-2
