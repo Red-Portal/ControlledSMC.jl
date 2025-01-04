@@ -11,7 +11,6 @@ using Interpolations
 using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
-using Optim, LineSearches
 using PDMats
 using ProgressMeter
 using Random
