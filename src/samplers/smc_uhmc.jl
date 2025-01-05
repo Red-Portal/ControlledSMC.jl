@@ -93,7 +93,7 @@ function adapt_sampler(
             sampler′ = @set sampler′.dampings[t] = params[2]
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
             return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   0.01 * abs2(params[1])
+                   1.0 * abs2(params[1])
         end
 
         ℓh_lower_guess = -7.5
@@ -183,7 +183,7 @@ function adapt_sampler(
             sampler′ = @set sampler′.dampings[t] = params[2]
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
             return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   0.01 * abs2(ℓh_prev - params[1])
+                   1.0 * abs2(ℓh_prev - params[1])
         end
 
         # Coordinate descent

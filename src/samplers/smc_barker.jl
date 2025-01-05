@@ -89,7 +89,7 @@ function adapt_sampler(
             xt_sub, α = transition_barker(rng_fixed, exp(ℓh′), πt, xtm1_sub)
             esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
             return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
-                   0.01 * abs2(ℓh′)
+                   1.0 * abs2(ℓh′)
         end
 
         ℓh_lower_guess = -15.0
@@ -133,7 +133,7 @@ function adapt_sampler(
             xt_sub, α = transition_barker(rng_fixed, exp(ℓh′), πt, xtm1_sub)
             esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
             return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
-                   0.01 * abs2(ℓh′ - ℓh_prev)
+                   1.0 * abs2(ℓh′ - ℓh_prev)
         end
 
         gss_abstol = 1e-2

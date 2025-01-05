@@ -1,8 +1,6 @@
 
 struct SMCMALA{
-    Stepsizes<:AbstractVector,
-    Precond<:AbstractMatrix,
-    Adaptor<:AbstractAdaptor,
+    Stepsizes<:AbstractVector,Precond<:AbstractMatrix,Adaptor<:AbstractAdaptor
 } <: AbstractSMC
     stepsizes    :: Stepsizes
     precond      :: Precond
@@ -14,8 +12,8 @@ function SMCMALA(
     stepsize::Real,
     n_steps::Int,
     precond::AbstractMatrix,
-    adaptor::Union{<:NoAdaptation, <:AcceptanceRateCtrl, <:ESJDMax},
-    n_mcmc_steps::Int = 1
+    adaptor::Union{<:NoAdaptation,<:AcceptanceRateCtrl,<:ESJDMax},
+    n_mcmc_steps::Int=1,
 )
     stepsizes = Fill(stepsize, n_steps)
     return SMCMALA{typeof(stepsizes),typeof(precond),typeof(adaptor)}(
@@ -99,9 +97,9 @@ function adapt_sampler(
         function obj_init(ℓh′)
             rng_fixed = copy(rng)
             xt_sub, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub), dims=1))
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) + 
-                0.01*abs2(ℓh′)
+            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
+                   1.0 * abs2(ℓh′)
         end
 
         ℓh_lower_guess = -15.0
@@ -114,15 +112,15 @@ function adapt_sampler(
 
         ## Find an interval that contains a (possibly local) minima
         ℓh_upper_increase_ratio = 1.2
-        n_interval_max_iters    = ceil(Int, log(ℓh_upper_increase_ratio, 20))
+        n_interval_max_iters = ceil(Int, log(ℓh_upper_increase_ratio, 20))
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
-            obj_init, ℓh_lower, ℓh_upper_increase_ratio, 1, n_max_iters=n_interval_max_iters
+            obj_init, ℓh_lower, ℓh_upper_increase_ratio, 1; n_max_iters=n_interval_max_iters
         )
 
         ## Properly optimize objective
         gss_abstol = 1e-2
         ℓh, n_gss_iters = golden_section_search(
-            obj_init, ℓh_lower, ℓh_upper; abstol=gss_abstol,
+            obj_init, ℓh_lower, ℓh_upper; abstol=gss_abstol
         )
         h = exp(ℓh)
 
@@ -143,9 +141,9 @@ function adapt_sampler(
         function obj(ℓh′)
             rng_fixed = copy(rng)
             xt_sub, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub), dims=1))
+            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
             return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
-                0.01*abs2(ℓh′ - ℓh_prev)
+                   1.0 * abs2(ℓh′ - ℓh_prev)
         end
 
         gss_abstol = 1e-2
@@ -155,7 +153,7 @@ function adapt_sampler(
         _, α = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
 
         sampler = @set sampler.stepsizes[t] = h
-        stats   = (golden_section_search_iterations = n_gss_iters, mala_stepsize                    = h, acceptance_rate                  = α)
+        stats   = (golden_section_search_iterations=n_gss_iters, mala_stepsize=h, acceptance_rate=α)
         return sampler, stats
     end
 end

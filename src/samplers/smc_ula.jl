@@ -62,8 +62,8 @@ function potential_with_backward(
     ht, Γ  = stepsizes[t], precond
     ℓπt_xt = LogDensityProblems.logdensity(πt, xt)
     q_fwd  = gradient_flow_euler(πt, xtm1, ht, Γ)
-    K      = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
-    ℓk     = logpdf.(K, eachcol(xt))
+    K      = BatchMvNormal(q_fwd, 2 * ht * Γ)
+    ℓk     = logpdf(K, xt)
 
     if t == 2
         return ℓπt_xt - ℓk
@@ -71,8 +71,8 @@ function potential_with_backward(
         htm1       = stepsizes[t - 1]
         ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
         q_bwd      = gradient_flow_euler(πtm1, xt, htm1, Γ)
-        L          = MvNormal.(eachcol(q_bwd), Ref(2 * htm1 * Γ))
-        ℓl         = logpdf.(L, eachcol(xtm1))
+        L          = BatchMvNormal(q_bwd, 2 * htm1 * Γ)
+        ℓl         = logpdf(L, xtm1)
         return ℓπt_xt + ℓl - ℓπtm1_xtm1 - ℓk
     end
 end
@@ -91,16 +91,16 @@ function potential_with_backward(
     ht, Γ  = stepsizes[t], precond
     ℓπt_xt = LogDensityProblems.logdensity(πt, xt)
     q_fwd  = gradient_flow_euler(πt, xtm1, ht, Γ)
-    K      = MvNormal.(eachcol(q_fwd), Ref(2 * ht * Γ))
-    ℓk     = logpdf.(K, eachcol(xt))
+    K      = BatchMvNormal(q_fwd, 2 * ht * Γ)
+    ℓk     = logpdf(K, xt)
 
     if t == 2
         return ℓπt_xt - ℓk
     else
         ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
         q_bwd      = gradient_flow_euler(πt, xt, ht, Γ)
-        L          = MvNormal.(eachcol(q_bwd), Ref(2 * ht * Γ))
-        ℓl         = logpdf.(L, eachcol(xtm1))
+        L          = BatchMvNormal(q_bwd, 2 * ht * Γ)
+        ℓl         = logpdf(L, xtm1)
         return ℓπt_xt + ℓl - ℓπtm1_xtm1 - ℓk
     end
 end
@@ -132,7 +132,7 @@ function adapt_sampler(
             sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   0.01 * abs2(ℓh′)
+                   1.0 * abs2(ℓh′)
         end
 
         ℓh_lower_guess = -15.0
@@ -180,7 +180,7 @@ function adapt_sampler(
             sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
             return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   0.01 * abs2(ℓh′ - ℓh_prev)
+                   1.0 * abs2(ℓh′ - ℓh_prev)
         end
 
         ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=1e-2)

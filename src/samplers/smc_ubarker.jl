@@ -159,7 +159,7 @@ function adapt_sampler(
             sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
             return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   0.01 * abs2(ℓh′)
+                   1.0 * abs2(ℓh′)
         end
 
         ℓh_lower_guess = -15.0
@@ -198,7 +198,7 @@ function adapt_sampler(
             sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
             return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   0.01 * abs2(ℓh′ - ℓh_prev)
+                   1.0 * abs2(ℓh′ - ℓh_prev)
         end
 
         ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=1e-2)
