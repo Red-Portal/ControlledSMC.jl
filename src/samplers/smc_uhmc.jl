@@ -96,7 +96,7 @@ function adapt_sampler(
                    0.01 * abs2(params[1])
         end
 
-        ℓh_lower_guess = -10.0
+        ℓh_lower_guess = -7.5
         ρ_guess        = 0.5
 
         ## Find any point that is not degenerate
@@ -109,8 +109,8 @@ function adapt_sampler(
         )
 
         ## Find remaining endpoint of an interval containing a (possibly local) minima
-        ℓh_upper_increase_ratio = (1 + √5) / 2
-        n_interval_max_iters = ceil(Int, log(ℓh_upper_increase_ratio, 40))
+        ℓh_upper_increase_ratio = 1.2
+        n_interval_max_iters = ceil(Int, log(ℓh_upper_increase_ratio, 15))
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
             ℓh′ -> obj_init([ℓh′, ρ_guess]),
             ℓh_lower,

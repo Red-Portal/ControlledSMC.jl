@@ -104,7 +104,7 @@ function adapt_sampler(
                 0.01*abs2(ℓh′)
         end
 
-        ℓh_lower_guess = -20.0
+        ℓh_lower_guess = -15.0
 
         ## Find any point between 1e-10 and 2e-16 that is not degenerate
         ℓh_decrease_stepsize = log(0.5)
@@ -113,8 +113,8 @@ function adapt_sampler(
         )
 
         ## Find an interval that contains a (possibly local) minima
-        ℓh_upper_increase_ratio = (1 + √5)/2
-        n_interval_max_iters    = ceil(Int, log(ℓh_upper_increase_ratio, 40))
+        ℓh_upper_increase_ratio = 1.2
+        n_interval_max_iters    = ceil(Int, log(ℓh_upper_increase_ratio, 20))
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
             obj_init, ℓh_lower, ℓh_upper_increase_ratio, 1, n_max_iters=n_interval_max_iters
         )
