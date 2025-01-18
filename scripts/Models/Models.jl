@@ -13,6 +13,7 @@ using Statistics
 using StatsBase
 using StatsFuns
 
+include("dist.jl")
 include("logistic.jl")
 include("lgcp.jl")
 include("brownian.jl")
