@@ -11,23 +11,15 @@ struct BackwardKLMin <: AbstractAdaptor
     n_subsample::Int
 end
 
-struct PartialForwardKLMin <: AbstractAdaptor
-    n_subsample::Int
-end
-
-struct PartialBackwardKLMin <: AbstractAdaptor
-    n_subsample::Int
-end
-
 struct AnnealedFlowTransport <: AbstractAdaptor
     n_subsample::Int
 end
 
-struct LogPotentialVarianceMin <: AbstractAdaptor
+struct ESJDMax <: AbstractAdaptor
     n_subsample::Int
 end
 
-struct ESJDMax <: AbstractAdaptor
+struct ChiSquareMin <: AbstractAdaptor
     n_subsample::Int
 end
 
@@ -36,60 +28,58 @@ struct AcceptanceRateCtrl{Acc<:Real} <: AbstractAdaptor
     target_acceptance_rate::Acc
 end
 
-struct CondESSMax <: AbstractAdaptor end
+struct CondESSMax <: AbstractAdaptor
+    n_subsample::Int
+end
 
 adaptation_objective(::NoAdaptation, ::AbstractVector, ::AbstractVector) = 0.0
 
 function adaptation_objective(
-    ::ForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector, args...
+    ::ForwardKLMin, ℓw::AbstractVector, ℓdPdQ::AbstractVector, ℓG::AbstractVector, args...
 )
-    N       = length(ℓw)
-    ℓ∑w     = logsumexp(ℓw)
-    ℓw_norm = @. ℓw - ℓ∑w
-    ℓw′     = ℓw_norm + ℓG
-    ℓ∑w′    = logsumexp(ℓw′)
-    ℓEw′    = ℓ∑w′ - log(N)
-    w′_norm = @. exp(ℓw′ - ℓ∑w′)
-    return dot(w′_norm, ℓG) - ℓEw′
+    ℓ∑w       = logsumexp(ℓw)
+    ℓw_norm   = @. ℓw - ℓ∑w
+    w_norm    = exp.(ℓw_norm)
+    ∑ℓdPdQ    = logsumexp(ℓdPdQ)
+    dPdQ_norm = @. exp(ℓdPdQ - ∑ℓdPdQ)
+    return dot(w_norm .* dPdQ_norm, xexpx.(ℓG))
 end
 
 function adaptation_objective(
-    ::BackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector, args...
+    ::BackwardKLMin, ℓw::AbstractVector, ℓdPdQ::AbstractVector, ℓG::AbstractVector, args...
 )
-    N       = length(ℓw)
-    ℓ∑w     = logsumexp(ℓw)
-    ℓw_norm = @. ℓw - ℓ∑w
-    ℓw′     = ℓw_norm + ℓG
-    ℓEw′    = logsumexp(ℓw′) - log(N)
-    return -mean(ℓG) + ℓEw′
+    ∑ℓw       = logsumexp(ℓw)
+    w_norm    = @. exp(ℓw - ∑ℓw)
+    ∑ℓdPdQ    = logsumexp(ℓdPdQ)
+    dPdQ_norm = @. exp(ℓdPdQ - ∑ℓdPdQ)
+    return dot(w_norm .* dPdQ_norm, -ℓG)
 end
 
 function adaptation_objective(
-    ::PartialForwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector, args...
-)
-    ℓ∑w     = logsumexp(ℓw)
-    ℓw_norm = @. ℓw - ℓ∑w
-    ℓw′     = ℓw_norm + ℓG
-    ℓ∑w′    = logsumexp(ℓw′)
-    w′_norm = @. exp(ℓw′ - ℓ∑w′)
-    return dot(w′_norm, ℓG)
-end
-
-function adaptation_objective(
-    ::PartialBackwardKLMin, ℓw::AbstractVector, ℓG::AbstractVector, args...
-)
-    return -mean(ℓG)
-end
-
-function adaptation_objective(
-    ::AnnealedFlowTransport, ℓw::AbstractVector, ℓG::AbstractVector, args...
+    ::AnnealedFlowTransport,
+    ℓw::AbstractVector,
+    ℓdPdQ::AbstractVector,
+    ℓG::AbstractVector,
+    args...,
 )
     ∑ℓw    = logsumexp(ℓw)
     w_norm = @. exp(ℓw - ∑ℓw)
     return dot(w_norm, -ℓG)
 end
 
-function adaptation_objective(::CondESSMax, ℓw::AbstractVector, ℓG::AbstractVector, args...)
+function adaptation_objective(
+    ::ChiSquareMin, ℓw::AbstractVector, ℓdPdQ::AbstractVector, ℓG::AbstractVector, args...
+)
+    ℓ∑w        = logsumexp(ℓw)
+    ℓw_norm    = ℓw .- ℓ∑w
+    ∑ℓdPdQ     = logsumexp(ℓdPdQ)
+    ℓdPdQ_norm = ℓdPdQ .- ∑ℓdPdQ
+    return logsumexp(ℓw_norm + ℓdPdQ_norm + 2 * logsubexp(ℓG, 0))
+end
+
+function adaptation_objective(
+    ::CondESSMax, ℓw::AbstractVector, ::AbstractVector, ℓG::AbstractVector, args...
+)
     N         = length(ℓw)
     ℓ∑WG      = logsumexp(ℓw + ℓG)
     ℓEWG2     = logsumexp(ℓw + 2 * ℓG) - log(N)
@@ -98,19 +88,18 @@ function adaptation_objective(::CondESSMax, ℓw::AbstractVector, ℓG::Abstract
 end
 
 function adaptation_objective(
-    ::LogPotentialVarianceMin, ℓw::AbstractVector, ℓG::AbstractVector, args...
+    adaptor::AcceptanceRateCtrl,
+    ::AbstractVector,
+    ::AbstractVector,
+    ::AbstractVector,
+    log_acceptance_rate,
+    esjd,
 )
-    return var(ℓG)
+    return (log_acceptance_rate - log(adaptor.target_acceptance_rate))^2
 end
 
 function adaptation_objective(
-    adaptor::AcceptanceRateCtrl, ::AbstractVector, ::AbstractVector, acceptance_rate, esjd
-)
-    return (acceptance_rate - adaptor.target_acceptance_rate)^2
-end
-
-function adaptation_objective(
-    ::ESJDMax, ::AbstractVector, ::AbstractVector, acceptance_rate, esjd
+    ::ESJDMax, ::AbstractVector, ::AbstractVector, ::AbstractVector, acceptance_rate, esjd
 )
     return -esjd
 end
@@ -167,26 +156,24 @@ function golden_section_search(f, a::Real, b::Real; abstol::Real=1e-2)
     return (b + a) / 2, n_iters
 end
 
-function find_golden_section_search_interval(
-    f, a::Real, ρ::Real, dir::Real; n_max_iters::Int=10
-)
-    @assert ρ > 1
+function find_golden_section_search_interval(f, a::Real, δ::Real, r::Real)
+    @assert r > 1
 
-    b = a
-    y = f(a)
-    k = 0
-    while k ≤ n_max_iters
-        b = a + dir * ρ^k
+    b  = a
+    y0 = f(a)
+    y  = y0
+    k  = 0
+    while y0 ≥ y
+        b = a + δ * r^k
         y′ = f(b)
         if y < y′
             break
         elseif !isfinite(y′)
             @warn "Degenerate objective value f(x) = $y′ for x = $b encountered during golden section search initial interval search."
-            return a + dir * ρ^(k - 1), a + dir * ρ^(k - 2), k
+            return a + δ * r^(k - 1), a + δ * r^(k - 2), k
         end
         y = y′
         k += 1
     end
-    return a + dir * ρ^k, a + dir * ρ^(k - 1), k
+    return a + δ * r^k, a + δ * r^(k - 1), k
 end
-

@@ -45,7 +45,6 @@ export
     BackwardKLMin,
     ChiSquareMin,
     AnnealedFlowTransport,
-    LogPotentialVarianceMin,
     AcceptanceRateCtrl,
     ESJDMax
 

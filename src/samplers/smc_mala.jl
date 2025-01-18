@@ -32,11 +32,10 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
     ℓπt_prop = LogDensityProblems.logdensity(πt, x_prop)
     ℓπt      = LogDensityProblems.logdensity(πt, x)
 
-    q_fwd = MvNormal.(eachcol(μ_fwd), Ref(2 * h * Γ))
-    q_bwd = MvNormal.(eachcol(μ_bwd), Ref(2 * h * Γ))
-
-    ℓq_fwd = logpdf.(q_fwd, eachcol(x_prop))
-    ℓq_bwd = logpdf.(q_bwd, eachcol(x))
+    q_fwd  = BatchMvNormal(μ_fwd, 2 * h * Γ)
+    q_bwd  = BatchMvNormal(μ_bwd, 2 * h * Γ)
+    ℓq_fwd = logpdf(q_fwd, x_prop)
+    ℓq_bwd = logpdf(q_bwd, x)
 
     ℓα = @. min(ℓπt_prop - ℓπt + ℓq_bwd - ℓq_fwd, 0)
     ℓu = -Random.randexp(rng, length(ℓα))
@@ -48,8 +47,8 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
             x[:, n]
         end
     end
-    α = exp(logsumexp(ℓα) - log(n_particles))
-    return x_next, α
+    ℓEα = logsumexp(ℓα) - log(n_particles)
+    return x_next, ℓEα
 end
 
 function potential(::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix)
@@ -95,11 +94,10 @@ function adapt_sampler(
 
     if t == 2
         function obj_init(ℓh′)
-            rng_fixed = copy(rng)
-            xt_sub, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
-                   1.0 * abs2(ℓh′)
+            rng_fixed  = copy(rng)
+            xt_sub, ℓα = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
+            esjd       = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, ℓα, esjd)
         end
 
         ℓh_lower_guess = -15.0
@@ -116,7 +114,7 @@ function adapt_sampler(
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
             obj_init, ℓh_lower, ℓh_upper_increase_ratio, 1; n_max_iters=n_interval_max_iters
         )
-
+        
         ## Properly optimize objective
         gss_abstol = 1e-2
         ℓh, n_gss_iters = golden_section_search(
@@ -124,14 +122,23 @@ function adapt_sampler(
         )
         h = exp(ℓh)
 
-        _, α = transition_mala(rng, h, Γ, πt, xtm1_sub)
+        _, ℓα = transition_mala(rng, h, Γ, πt, xtm1_sub)
 
         stats = (
             feasible_lowerbound_search_obj_evals = n_feasible_evals,
             bracketing_interval_search_obj_evals = n_interval_evals,
             golden_section_search_iters          = n_gss_iters,
+            acceptance_rate                      = exp(ℓα),
             ula_stepsize                         = h,
         )
+
+        # display(stats)
+        # ℓh_range = range(-8, 2; length=128)
+        # obj_range = map(obj_init, ℓh_range)
+        # Plots.plot(ℓh_range, obj_range) |> display
+        # Plots.vline!([ℓh]) |> display
+        # throw()
+
         sampler = @set sampler.stepsizes[t] = exp(ℓh)
         return sampler, stats
     else
@@ -139,10 +146,10 @@ function adapt_sampler(
         ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
 
         function obj(ℓh′)
-            rng_fixed = copy(rng)
-            xt_sub, α = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
+            rng_fixed  = copy(rng)
+            xt_sub, ℓα = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
+            esjd       = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, ℓα , esjd) +
                    1.0 * abs2(ℓh′ - ℓh_prev)
         end
 
@@ -150,10 +157,14 @@ function adapt_sampler(
         ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=gss_abstol)
         h = exp(ℓh)
 
-        _, α = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
+        _, ℓα = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
 
         sampler = @set sampler.stepsizes[t] = h
-        stats   = (golden_section_search_iterations=n_gss_iters, mala_stepsize=h, acceptance_rate=α)
+        stats   = (
+            golden_section_search_iterations = n_gss_iters,
+            mala_stepsize                    = h,
+            acceptance_rate                  = exp(ℓα)
+        )
         return sampler, stats
     end
 end

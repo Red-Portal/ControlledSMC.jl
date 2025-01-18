@@ -40,8 +40,8 @@ function transition_barker(rng::Random.AbstractRNG, σ, π, x::AbstractMatrix)
             x[:, n]
         end
     end
-    α = exp(logsumexp(ℓα) - log(n_particles))
-    return x_next, α
+    ℓEα = logsumexp(ℓα) - log(n_particles)
+    return x_next, ℓEα
 end
 
 function potential(::SMCBarker, t::Int, πt, πtm1, xtm1::AbstractMatrix)
@@ -85,11 +85,10 @@ function adapt_sampler(
 
     if t == 2
         function obj_init(ℓh′)
-            rng_fixed = copy(rng)
-            xt_sub, α = transition_barker(rng_fixed, exp(ℓh′), πt, xtm1_sub)
-            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
-                   1.0 * abs2(ℓh′)
+            rng_fixed  = copy(rng)
+            xt_sub, ℓα = transition_barker(rng_fixed, exp(ℓh′), πt, xtm1_sub)
+            esjd       = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, ℓα, esjd)
         end
 
         ℓh_lower_guess = -15.0
@@ -114,12 +113,13 @@ function adapt_sampler(
         )
         h = exp(ℓh)
 
-        _, α = transition_barker(rng, h, πt, xtm1_sub)
+        _, ℓα = transition_barker(rng, h, πt, xtm1_sub)
 
         stats = (
             feasible_lowerbound_search_obj_evals = n_feasible_evals,
             bracketing_interval_search_obj_evals = n_interval_evals,
             golden_section_search_iters          = n_gss_iters,
+            acceptance_rate                      = exp(ℓα),
             barker_stepsize                      = h,
         )
         sampler = @set sampler.stepsizes[t] = exp(ℓh)
@@ -129,10 +129,10 @@ function adapt_sampler(
         ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
 
         function obj(ℓh′)
-            rng_fixed = copy(rng)
-            xt_sub, α = transition_barker(rng_fixed, exp(ℓh′), πt, xtm1_sub)
-            esjd      = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, α, esjd) +
+            rng_fixed  = copy(rng)
+            xt_sub, ℓα = transition_barker(rng_fixed, exp(ℓh′), πt, xtm1_sub)
+            esjd       = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, ℓα, esjd) +
                    1.0 * abs2(ℓh′ - ℓh_prev)
         end
 
@@ -140,10 +140,14 @@ function adapt_sampler(
         ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=gss_abstol)
         h = exp(ℓh)
 
-        _, α = transition_barker(rng, exp(ℓh), πt, xtm1_sub)
+        _, ℓα = transition_barker(rng, exp(ℓh), πt, xtm1_sub)
 
         sampler = @set sampler.stepsizes[t] = h
-        stats   = (golden_section_search_iterations=n_gss_iters, barker_stepsize=h, acceptance_rate=α)
+        stats   = (
+            golden_section_search_iterations = n_gss_iters,
+            barker_stepsize                  = h,
+            acceptance_rate                  = exp(ℓα)
+        )
         return sampler, stats
     end
 end

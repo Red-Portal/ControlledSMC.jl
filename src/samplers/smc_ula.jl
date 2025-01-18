@@ -105,8 +105,6 @@ function potential_with_backward(
     end
 end
 
-using Plots
-
 function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCULA,
@@ -118,36 +116,45 @@ function adapt_sampler(
 )
     if sampler.adaptor isa NoAdaptation
         return sampler, NamedTuple()
+    elseif sampler.backward isa DetailedBalance && t == 2
+        return sampler, NamedTuple()
     end
 
     # Subsample particles to reduce adaptation overhead
-    n_particles = size(xtm1, 2)
-    idx_sub     = StatsBase.sample(rng, 1:n_particles, sampler.adaptor.n_subsample; replace=false)
-    xtm1_sub    = xtm1[:, idx_sub]
-    ℓwtm1_sub   = ℓwtm1[idx_sub]
+    w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
+    n_sub     = sampler.adaptor.n_subsample
+    sub_idx   = systematic_sampling(rng, w_norm, n_sub)
+    xtm1_sub  = xtm1[:, sub_idx]
+    ℓdPdQ_sub = ℓwtm1[sub_idx]
+    ℓwtm1_sub = fill(-log(n_sub), n_sub)
 
     if t == 2
         function obj_init(ℓh′)
             rng_fixed = copy(rng)
             sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-           return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   1.0 * abs2(ℓh′)
+           return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub)
         end
+
+        ℓh_range = range(-10, 2; length=32)
+        obj_range = map(obj_init, ℓh_range)
+        Plots.plot(ℓh_range, obj_range) |> display
+        #Plots.vline!([ℓh_lower, ℓh_upper]) |> display
+        Plots.vline!([ℓh]) |> display
 
         ℓh_lower_guess = -15.0
 
         ## Find any point between 1e-10 and 2e-16 that is not degenerate
-        ℓh_decrease_stepsize = log(0.5)
+        ℓh_decrease_stepsize = -1
         ℓh_lower, n_feasible_evals = find_feasible_point(
             obj_init, ℓh_lower_guess, ℓh_decrease_stepsize, log(eps(Float64))
         )
 
         ## Find remaining endpoint of an interval containing a (possibly local) minima
-        ℓh_upper_increase_ratio = 1.2
-        n_interval_max_iters    = ceil(Int, log(ℓh_upper_increase_ratio, 20))
+        ℓh_upper_increaes_coeff = 2.0
+        ℓh_upper_increase_ratio = 1.3
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
-            obj_init, ℓh_lower, ℓh_upper_increase_ratio, 1; n_max_iters=n_interval_max_iters
+            obj_init, ℓh_lower, ℓh_upper_increaes_coeff, ℓh_upper_increase_ratio
         )
 
         # Properly optimize the objective
@@ -161,14 +168,6 @@ function adapt_sampler(
             ula_stepsize                                = h,
         )
 
-        # display(stats)
-        # ℓh_range = range(-5, 2; length=32)
-        # obj_range = map(obj_init, ℓh_range)
-        # Plots.plot(ℓh_range, obj_range, yscale=:log10) |> display
-        # #Plots.vline!([ℓh_lower, ℓh_upper]) |> display
-        # Plots.vline!([ℓh]) |> display
-        # throw()
-
         sampler = @set sampler.stepsizes[2] = h
         return sampler, stats
     else
@@ -179,8 +178,8 @@ function adapt_sampler(
             rng_fixed = copy(rng)
             sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   1.0 * abs2(ℓh′ - ℓh_prev)
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) #+
+                   #1.0 * abs2(ℓh′ - ℓh_prev)
         end
 
         ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=1e-2)
