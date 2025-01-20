@@ -46,12 +46,12 @@ end
 
 function get_stan_model(model_name::String)
     id = myid()
-    if !isdir(".stan_$id")
-        mkdir(".stan_$id")
+    if !isdir(".stan")
+        mkdir(".stan")
     end
     pdb  = PosteriorDB.database()
     post = PosteriorDB.posterior(pdb, model_name)
-    StanProblem(post, ".stan_$id/"; force=true)
+    StanProblem(post, ".stan/"; force=true)
 end
 
 function prepare_sampler(sampler::SMCULA, d, n_iters)
