@@ -286,7 +286,7 @@ function run_posteriordb_experiments()
     end
 end
 
-function run_posteriordb_experiments()
+function run_custom_experiments()
     fname = "data/raw/posteriordb_experiments.jld2"
 
     n_particles = 1024
