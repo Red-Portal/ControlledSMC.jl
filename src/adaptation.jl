@@ -3,33 +3,40 @@ abstract type AbstractAdaptor end
 
 struct NoAdaptation <: AbstractAdaptor end
 
-struct ForwardKLMin <: AbstractAdaptor
+@kwdef struct ForwardKLMin{F<:Real} <: AbstractAdaptor
     n_subsample::Int
+    regularization::F = 0.0
 end
 
-struct BackwardKLMin <: AbstractAdaptor
+@kwdef struct BackwardKLMin{F<:Real} <: AbstractAdaptor
     n_subsample::Int
+    regularization::F = 0.0
 end
 
-struct AnnealedFlowTransport <: AbstractAdaptor
+@kwdef struct AnnealedFlowTransport{F<:Real} <: AbstractAdaptor
     n_subsample::Int
+    regularization::F = 0.0
 end
 
-struct ESJDMax <: AbstractAdaptor
+@kwdef struct ESJDMax{F<:Real} <: AbstractAdaptor
     n_subsample::Int
+    regularization::F = 0.0
 end
 
-struct ChiSquareMin <: AbstractAdaptor
+@kwdef struct ChiSquareMin{F<:Real} <: AbstractAdaptor
     n_subsample::Int
+    regularization::F = 0.0
 end
 
-struct AcceptanceRateCtrl{Acc<:Real} <: AbstractAdaptor
+@kwdef struct AcceptanceRateCtrl{Acc<:Real,F<:Real} <: AbstractAdaptor
     n_subsample::Int
     target_acceptance_rate::Acc
+    regularization::F = 0.0
 end
 
-struct CondESSMax <: AbstractAdaptor
+@kwdef struct CondESSMax{F<:Real} <: AbstractAdaptor
     n_subsample::Int
+    regularization::F = 0.0
 end
 
 adaptation_objective(::NoAdaptation, ::AbstractVector, ::AbstractVector) = 0.0

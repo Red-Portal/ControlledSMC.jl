@@ -12,7 +12,8 @@ function update_schedule(
             ℓG2 - 2*ℓG1
         end
     end
-    local_barrier          = sqrt.(divergences)
+    local_barrier          = @. sqrt(max(divergences, eps(eltype(schedule))))
+    local_barrier[1]       = zero(eltype(local_barrier))
     barrier                = cumsum(local_barrier)
     global_barrier         = last(barrier)
     barrier_interp         = Interpolations.interpolate(schedule, barrier, FritschCarlsonMonotonicInterpolation())
@@ -20,6 +21,5 @@ function update_schedule(
     target_barrier_profile = global_barrier*range(0, 1; length=n_steps_next)
     schedule_next          = local_barrier_invmap.(target_barrier_profile)
     local_barrier          = ForwardDiff.derivative.(Ref(barrier_interp), schedule)
-
     schedule_next, local_barrier, global_barrier
 end

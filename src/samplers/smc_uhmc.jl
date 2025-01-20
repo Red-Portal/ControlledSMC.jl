@@ -4,11 +4,13 @@ struct SMCUHMC{
     Dampings<:AbstractVector,
     Mass<:AbstractMatrix,
     Adaptor<:AbstractAdaptor,
+    DampingGrid<:AbstractVector,
 } <: AbstractSMC
-    stepsizes   :: Stepsizes
-    dampings    :: Dampings
-    mass_matrix :: Mass
-    adaptor     :: Adaptor
+    stepsizes    :: Stepsizes
+    dampings     :: Dampings
+    mass_matrix  :: Mass
+    adaptor      :: Adaptor
+    damping_grid :: DampingGrid
 end
 
 function SMCUHMC(
@@ -16,12 +18,19 @@ function SMCUHMC(
     damping::Real,
     n_steps::Int,
     mass_matrix::AbstractMatrix,
-    adaptor::AbstractAdaptor,
+    adaptor::AbstractAdaptor;
+    damping_grid::AbstractVector=[0.01, 0.99],
 )
     stepsizes = Fill(stepsize, n_steps)
     dampings  = Fill(damping, n_steps)
-    return SMCUHMC{typeof(stepsizes),typeof(dampings),typeof(mass_matrix),typeof(adaptor)}(
-        stepsizes, dampings, mass_matrix, adaptor
+    return SMCUHMC{
+        typeof(stepsizes),
+        typeof(dampings),
+        typeof(mass_matrix),
+        typeof(adaptor),
+        typeof(damping_grid),
+    }(
+        stepsizes, dampings, mass_matrix, adaptor, damping_grid
     )
 end
 
@@ -57,10 +66,10 @@ function mutate_with_potential(
     ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 
-    L  = MvNormal.(sqrt1mα * eachcol(vthalf), Ref(α * M))
-    K  = MvNormal.(sqrt1mα * eachcol(vtm1), Ref(α * M))
-    ℓl = logpdf.(L, eachcol(vtm1))
-    ℓk = logpdf.(K, eachcol(vthalf))
+    L  = BatchMvNormal(sqrt1mα * vthalf, α * M)
+    K  = BatchMvNormal(sqrt1mα * vtm1, α * M)
+    ℓl = logpdf(L, vtm1)
+    ℓk = logpdf(K, vthalf)
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
     return vcat(xt, vt), ℓG, NamedTuple()
 end
@@ -79,12 +88,14 @@ function adapt_sampler(
     end
 
     # Subsample particles to reduce adaptation overhead
-    n_particles = size(xtm1, 2)
-    idx_sub     = StatsBase.sample(rng, 1:n_particles, sampler.adaptor.n_subsample; replace=false)
-    xtm1_sub    = xtm1[:, idx_sub]
-    ℓwtm1_sub   = ℓwtm1[idx_sub]
+    w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
+    n_sub     = sampler.adaptor.n_subsample
+    sub_idx   = systematic_sampling(rng, w_norm, n_sub)
+    xtm1_sub  = xtm1[:, sub_idx]
+    ℓdPdQ_sub = ℓwtm1[sub_idx]
+    ℓwtm1_sub = fill(-log(n_sub), n_sub)
 
-    ρ_grid = [0.01, 0.99] #[0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95]
+    ρ_grid = sampler.damping_grid
 
     if t == 2
         function obj_init(params)
@@ -92,15 +103,15 @@ function adapt_sampler(
             sampler′ = @set sampler.stepsizes[t] = exp(params[1])
             sampler′ = @set sampler′.dampings[t] = params[2]
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   1.0 * abs2(params[1])
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) +
+                sampler.adaptor.regularization * abs2(params[1])
         end
 
         ℓh_lower_guess = -7.5
         ρ_guess        = 0.5
 
         ## Find any point that is not degenerate
-        ℓh_decrease_stepsize = log(0.5)
+        ℓh_decrease_stepsize = -1.0
         ℓh_lower, n_feasible_evals = find_feasible_point(
             ℓh′ -> obj_init([ℓh′, ρ_guess]),
             ℓh_lower_guess,
@@ -109,14 +120,14 @@ function adapt_sampler(
         )
 
         ## Find remaining endpoint of an interval containing a (possibly local) minima
-        ℓh_upper_increase_ratio = 1.2
+        ℓh_upper_increase_coeff = 2.0
+        ℓh_upper_increase_ratio = 1.3
         n_interval_max_iters = ceil(Int, log(ℓh_upper_increase_ratio, 15))
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
             ℓh′ -> obj_init([ℓh′, ρ_guess]),
             ℓh_lower,
+            ℓh_upper_increase_coeff,
             ℓh_upper_increase_ratio,
-            1;
-            n_max_iters=n_interval_max_iters,
         )
 
         ## Properly optimize objective with the initial guess damping
@@ -182,8 +193,8 @@ function adapt_sampler(
             sampler′ = @set sampler.stepsizes[t] = exp(params[1])
             sampler′ = @set sampler′.dampings[t] = params[2]
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓG_sub) +
-                   1.0 * abs2(ℓh_prev - params[1])
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) +
+                   sampler.adaptor.regularization * abs2(ℓh_prev - params[1])
         end
 
         # Coordinate descent
@@ -224,7 +235,7 @@ function adapt_sampler(
 
         sampler = @set sampler.stepsizes[t] = h
         sampler = @set sampler.dampings[t] = ρ
-        stats   = (uhmc_stepsize                            = exp(ℓh), uhmc_damping                             = ρ, coordinate_descent_iterations            = coordesc_iters, coordinate_descent_objective_evaluations = n_obj_evals)
+        stats   = (uhmc_stepsize=exp(ℓh), uhmc_damping=ρ, coordinate_descent_iterations=coordesc_iters, coordinate_descent_objective_evaluations=n_obj_evals)
         return sampler, stats
     end
 end

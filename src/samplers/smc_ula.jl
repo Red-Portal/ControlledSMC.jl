@@ -116,8 +116,6 @@ function adapt_sampler(
 )
     if sampler.adaptor isa NoAdaptation
         return sampler, NamedTuple()
-    elseif sampler.backward isa DetailedBalance && t == 2
-        return sampler, NamedTuple()
     end
 
     # Subsample particles to reduce adaptation overhead
@@ -133,14 +131,9 @@ function adapt_sampler(
             rng_fixed = copy(rng)
             sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-           return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub)
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) +
+                sampler.adaptor.regularization * abs2(ℓh′)
         end
-
-        ℓh_range = range(-10, 2; length=32)
-        obj_range = map(obj_init, ℓh_range)
-        Plots.plot(ℓh_range, obj_range) |> display
-        #Plots.vline!([ℓh_lower, ℓh_upper]) |> display
-        Plots.vline!([ℓh]) |> display
 
         ℓh_lower_guess = -15.0
 
@@ -151,15 +144,22 @@ function adapt_sampler(
         )
 
         ## Find remaining endpoint of an interval containing a (possibly local) minima
-        ℓh_upper_increaes_coeff = 2.0
+        ℓh_upper_increase_coeff = 2.0
         ℓh_upper_increase_ratio = 1.3
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
-            obj_init, ℓh_lower, ℓh_upper_increaes_coeff, ℓh_upper_increase_ratio
+            obj_init, ℓh_lower, ℓh_upper_increase_coeff, ℓh_upper_increase_ratio
         )
 
         # Properly optimize the objective
         ℓh, n_gss_iters = golden_section_search(obj_init, ℓh_lower, ℓh_upper; abstol=1e-2)
         h = exp(ℓh)
+
+        # ℓh_range = range(-15, 0; length=32)
+        # obj_range = @showprogress map(obj_init, ℓh_range)
+        # Plots.plot(ℓh_range, obj_range, yscale=:log10) |> display
+        # Plots.vline!([ℓh_lower, ℓh_upper]) |> display
+        # Plots.vline!([ℓh]) |> display
+        # throw()
 
         stats = (
             feasible_search_objective_evaluations       = n_feasible_evals,
@@ -178,8 +178,8 @@ function adapt_sampler(
             rng_fixed = copy(rng)
             sampler′ = @set sampler.stepsizes[t] = exp(ℓh′)
             _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) #+
-                   #1.0 * abs2(ℓh′ - ℓh_prev)
+            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) +
+                   sampler.adaptor.regularization * abs2(ℓh′ - ℓh_prev)
         end
 
         ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=1e-2)
