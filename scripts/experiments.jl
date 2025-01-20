@@ -244,8 +244,70 @@ function run_posteriordb_experiments()
         "bones_data-bones_model",
         "surgical_data-surgical_model",
         ]),
-        (n_particles, n_subsample) in [ (1024, 128),
-                                        (256, 32)],
+        (n_particles, n_subsample) in [(256, 32),
+                                       (1024, 128)],
+        (samplername, sampler) in [
+            (:SMCULA, SMCULA(
+                1.0, 1, TimeCorrectForwardKernel(), Eye(1),
+                AnnealedFlowTransport(; n_subsample=128, regularization=0.1)
+            )),
+            (:SMCUHMC, SMCUHMC(
+                1.0, 1.0, 1, Eye(1),
+                AnnealedFlowTransport(; n_subsample=128, regularization=10.0)
+            ))
+        ]
+        
+        config = (
+            name        = name,
+            sampler     = samplername,
+            n_iters     = n_iters,
+            n_particles = n_particles,
+            n_subsample = n_subsample,
+        )
+
+        data  = JLD2.load(fname, "data")
+        if haskey(data, config)
+            continue
+        else
+            @info("Running", config...)
+            try
+                data[config] = :running
+                res          = run_smc(name, adtype, sampler, n_particles, n_iters, n_reps; show_progress=true)
+                data         = JLD2.load(fname, "data")
+                data[config] = res
+                JLD2.save(fname, "data", data, "metadata", metadata)
+            catch e
+                @warn "$(name) failed:\n$(e)"
+                data         = JLD2.load(fname, "data")
+                data[config] = e
+                JLD2.save(fname, "data", data, "metadata", metadata)
+            end
+        end
+    end
+end
+
+function run_posteriordb_experiments()
+    fname = "data/raw/posteriordb_experiments.jld2"
+
+    n_particles = 1024
+    n_reps      = 32
+    n_iters     = 64
+    adtype      = AutoMooncake(; config=Mooncake.Config())
+
+    metadata = (
+        samplers    = [:SMCULA, :SMCUHMC],
+        n_iters     = [64],
+        n_particles = [1024, 256],
+        n_subsample = [128, 32],
+    )
+
+    if !isfile(fname)
+        JLD2.save(fname, "data", Dict(), "metadata", metadata)
+    end
+
+    for name in [],
+        (n_particles, n_subsample) in [ (256, 32),
+                                        (1024, 128)],
         (samplername, sampler) in [
             (:SMCULA, SMCULA(
                 1.0, 1, TimeCorrectForwardKernel(), Eye(1),
