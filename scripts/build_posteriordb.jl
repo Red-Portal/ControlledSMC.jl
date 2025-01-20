@@ -1,5 +1,5 @@
 
-using PosteriorDB
+using PosteriorDB, StanLogDensityProblems
 using ProgressMeter
 
 function main()
