@@ -45,7 +45,6 @@ function LogDensityProblems.logdensity_and_gradient(prob::TrackedLogDensityProbl
 end
 
 function get_stan_model(model_name::String)
-    id = myid()
     if !isdir(".stan")
         mkdir(".stan")
     end
@@ -161,7 +160,7 @@ function run_posteriordb_experiments()
     fname = "data/raw/posteriordb_experiments.jld2"
 
     n_particles = 1024
-    n_reps      = 32
+    n_reps      = 2 #32
     n_iters     = 64
     adtype      = AutoMooncake(; config=Mooncake.Config())
 
