@@ -184,8 +184,8 @@ function run_posteriordb_experiments()
     metadata = (
         samplers    = [:SMCULA, :SMCUHMC],
         n_iters     = [64],
-        n_particles = [1024],
-        n_subsample = [128],
+        n_particles = [1024, 256],
+        n_subsample = [128, 32],
     )
 
     if !isfile(fname)
@@ -244,7 +244,8 @@ function run_posteriordb_experiments()
         "bones_data-bones_model",
         "surgical_data-surgical_model",
         ]),
-        (n_particles, n_subsample) in [ (1024, 128), ],
+        (n_particles, n_subsample) in [ (1024, 128),
+                                        (256, 32)],
         (samplername, sampler) in [
             (:SMCULA, SMCULA(
                 1.0, 1, TimeCorrectForwardKernel(), Eye(1),

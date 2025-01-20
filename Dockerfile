@@ -6,11 +6,9 @@ ENV JULIA_DEPOT_PATH ${USER_HOME_DIR}/.julia
 
 RUN useradd -m -d ${USER_HOME_DIR} ${USER}
 
-# Copy source files
-ADD *.toml ${USER_HOME_DIR}/
-ADD scripts ${USER_HOME_DIR}/scripts
-
 RUN julia -e "using Pkg; Pkg.add([\"Distributed\", \"SysInfo\"])"
+RUN julia -e "cd(\"${USER_HOME_DIR}\"); using Pkg; Pkg.add(url=\"https://github.com/Red-Portal/ControlledSMC.jl.git\", rev=\"stepsize_adaptation\"); Pkg.develop(\"ControlledSMC\")"
+RUN cp $JULIA_DEPOT_PATH/dev/ControlledSMC/scripts $USER_HOME_DIR
 
 RUN julia -e "cd(\"${USER_HOME_DIR}\"); using Pkg; Pkg.activate(\"scripts\"); Pkg.add(url=\"https://github.com/Red-Portal/ControlledSMC.jl.git\", rev=\"stepsize_adaptation\"); Pkg.update(); Pkg.precompile(); Pkg.status(); println(pwd());"
 
@@ -35,4 +33,4 @@ RUN julia -e "cd(\"${USER_HOME_DIR}\"); using Pkg; Pkg.activate(\"scripts\"); in
 # configure the script entry point
 WORKDIR ${USER_HOME_DIR}
 
-ENTRYPOINT ["julia", "-e", "using Distributed, SysInfo; addprocs(min(SysInfo.ncores(), 4)); @everywhere using Pkg; @everywhere Pkg.activate(\"scripts\"); @everywhere include(\"scripts/experiments.jl\"); main()"]
+ENTRYPOINT ["julia", "-e", "using Distributed, SysInfo; addprocs(min(SysInfo.ncores(), 32)); @everywhere using Pkg; @everywhere Pkg.activate(\"scripts\"); @everywhere include(\"scripts/experiments.jl\"); main()"]
