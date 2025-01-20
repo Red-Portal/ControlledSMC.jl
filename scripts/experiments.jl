@@ -1,6 +1,7 @@
 
 using ADTypes
 using Accessors
+using BridgeStan
 using Chain
 using ControlledSMC
 using DifferentiationInterface
@@ -44,13 +45,29 @@ function LogDensityProblems.logdensity_and_gradient(prob::TrackedLogDensityProbl
     return LogDensityProblems.logdensity_and_gradient(prob.prob, x)
 end
 
+function LoadStanProblem(
+    post::PosteriorDB.Posterior, path::AbstractString; force::Bool=false, kwargs...
+)
+    model = PosteriorDB.model(post)
+    data = PosteriorDB.load(PosteriorDB.dataset(post), String)
+    lib = joinpath(path, "$(model.name)_model.so")
+    if isfile(lib)
+        return StanLogDensityProblems.StanProblem(lib, data; kwargs...)
+    else
+        stan_file = PosteriorDB.path(PosteriorDB.implementation(model, "stan"))
+        stan_file_new = joinpath(path, basename(stan_file))
+        cp(stan_file, stan_file_new; force=force)
+        return StanLogDensityProblems.StanProblem(stan_file_new, data; kwargs...)
+    end
+end
+
 function get_stan_model(model_name::String)
     if !isdir(".stan")
         mkdir(".stan")
     end
     pdb  = PosteriorDB.database()
     post = PosteriorDB.posterior(pdb, model_name)
-    StanProblem(post, ".stan/"; force=true)
+    LoadStanProblem(post, ".stan/"; force=true)
 end
 
 function prepare_sampler(sampler::SMCULA, d, n_iters)

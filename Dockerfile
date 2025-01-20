@@ -28,7 +28,6 @@ RUN apt-get update && apt-get install -y \
 USER ${USER}
 
 RUN git clone --recurse-submodules https://github.com/roualdes/bridgestan.git ${USER_HOME_DIR}/.bridgestan
-RUN mv ${USER_HOME_DIR}/bridgestan ${USER_HOME_DIR}/.bridgestan
 ENV BRIDGESTAN=${USER_HOME_DIR}/.bridgestan
 
 RUN julia -e "cd(\"${USER_HOME_DIR}\"); using Pkg; Pkg.activate(\"scripts\"); include(\"scripts/build_posteriordb.jl\"); main()"
@@ -36,4 +35,4 @@ RUN julia -e "cd(\"${USER_HOME_DIR}\"); using Pkg; Pkg.activate(\"scripts\"); in
 # configure the script entry point
 WORKDIR ${USER_HOME_DIR}
 
-ENTRYPOINT ["julia", "-e", "using Distributed, SysInfo; addprocs(2); @everywhere using Pkg; @everywhere Pkg.activate(\"scripts\"); @everywhere include(\"scripts/experiments.jl\"); main()"]
+ENTRYPOINT ["julia", "-e", "using Distributed, SysInfo; addprocs(min(SysInfo.ncores(), 4)); @everywhere using Pkg; @everywhere Pkg.activate(\"scripts\"); @everywhere include(\"scripts/experiments.jl\"); main()"]
