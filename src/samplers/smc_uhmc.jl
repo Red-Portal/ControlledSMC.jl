@@ -166,23 +166,11 @@ function adapt_sampler(
             log(eps(Float64)),
         )
 
-        abstol = 1e-2
-        ℓh_upper_increase_coeff = 0.1
-        ℓh_upper_increase_ratio = 1.5
-        ℓh_upper, _, n_upper_bound_evals = find_golden_section_search_interval(
-            obj_init_ℓh, ℓh_lower, ℓh_upper_increase_coeff, ℓh_upper_increase_ratio
-        )
-        ℓh, n_gss_iters = golden_section_search(
-            obj_init_ℓh, ℓh_lower, ℓh_upper; abstol
-        )
-
-        ρ, ℓh, stats = coordinate_descent_uhmc(obj_init, ρ_guess, ℓh, ρ_grid; abstol)
+        ρ, ℓh, stats = coordinate_descent_uhmc(obj_init, ρ_guess, ℓh_lower, ρ_grid)
 
         h     = exp(ℓh)
         stats = (
             feasible_search_objective_evaluations    = n_feasible_evals,
-            upper_bound_search_objective_evaluations = n_upper_bound_evals,
-            initial_golden_section_search_iterations = n_gss_iters,
             coordinate_descent_iterations            = stats.n_iters,
             coordinate_descent_objective_evaluations = stats.n_obj_evals,
             uhmc_stepsize                            = h,
