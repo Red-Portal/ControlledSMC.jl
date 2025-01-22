@@ -44,8 +44,7 @@ end
 function potential_with_backward(
     ::SMCULA, ::DetailedBalance, t::Int, πt, πtm1, xt::AbstractMatrix, xtm1::AbstractMatrix
 )
-    return LogDensityProblems.logdensity(πt, xtm1) -
-           LogDensityProblems.logdensity(πtm1, xtm1)
+    return logdensity_safe(πt, xtm1) - logdensity_safe(πtm1, xtm1)
 end
 
 function potential_with_backward(
@@ -60,7 +59,7 @@ function potential_with_backward(
     (; stepsizes, precond) = sampler
 
     ht, Γ  = stepsizes[t], precond
-    ℓπt_xt = LogDensityProblems.logdensity(πt, xt)
+    ℓπt_xt = logdensity_safe(πt, xt)
     q_fwd  = gradient_flow_euler(πt, xtm1, ht, Γ)
     K      = BatchMvNormal(q_fwd, 2 * ht * Γ)
     ℓk     = logpdf(K, xt)
@@ -69,7 +68,7 @@ function potential_with_backward(
         return ℓπt_xt - ℓk
     else
         htm1       = stepsizes[t - 1]
-        ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
+        ℓπtm1_xtm1 = logdensity_safe(πtm1, xtm1)
         q_bwd      = gradient_flow_euler(πtm1, xt, htm1, Γ)
         L          = BatchMvNormal(q_bwd, 2 * htm1 * Γ)
         ℓl         = logpdf(L, xtm1)
@@ -89,7 +88,7 @@ function potential_with_backward(
     (; stepsizes, precond) = sampler
 
     ht, Γ  = stepsizes[t], precond
-    ℓπt_xt = LogDensityProblems.logdensity(πt, xt)
+    ℓπt_xt = logdensity_safe(πt, xt)
     q_fwd  = gradient_flow_euler(πt, xtm1, ht, Γ)
     K      = BatchMvNormal(q_fwd, 2 * ht * Γ)
     ℓk     = logpdf(K, xt)
@@ -97,7 +96,7 @@ function potential_with_backward(
     if t == 2
         return ℓπt_xt - ℓk
     else
-        ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
+        ℓπtm1_xtm1 = logdensity_safe(πtm1, xtm1)
         q_bwd      = gradient_flow_euler(πt, xt, ht, Γ)
         L          = BatchMvNormal(q_bwd, 2 * ht * Γ)
         ℓl         = logpdf(L, xtm1)
@@ -144,8 +143,8 @@ function adapt_sampler(
         )
 
         ## Find remaining endpoint of an interval containing a (possibly local) minima
-        ℓh_upper_increase_coeff = 2.0
-        ℓh_upper_increase_ratio = 1.3
+        ℓh_upper_increase_coeff = 0.1
+        ℓh_upper_increase_ratio = 1.5
         ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
             obj_init, ℓh_lower, ℓh_upper_increase_coeff, ℓh_upper_increase_ratio
         )
@@ -171,8 +170,7 @@ function adapt_sampler(
         sampler = @set sampler.stepsizes[2] = h
         return sampler, stats
     else
-        ℓh_prev            = log(sampler.stepsizes[t - 1])
-        ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
+        ℓh_prev = log(sampler.stepsizes[t - 1])
 
         function obj(ℓh′)
             rng_fixed = copy(rng)
@@ -182,11 +180,26 @@ function adapt_sampler(
                    sampler.adaptor.regularization * abs2(ℓh′ - ℓh_prev)
         end
 
+        ℓh_change_coeff = 0.1
+        ℓh_change_ratio = 1.5
+        ℓh_upper, _, n_upper_bound_evals = find_golden_section_search_interval(
+            obj, ℓh_prev, ℓh_change_coeff, ℓh_change_ratio
+        )
+        ℓh_lower, _, n_lower_bound_evals = find_golden_section_search_interval(
+            obj, ℓh_upper, -ℓh_change_coeff, ℓh_change_ratio
+        )
+
         ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=1e-2)
 
         h       = exp(ℓh)
         sampler = @set sampler.stepsizes[t] = h
-        stats   = (golden_section_search_iterations=n_gss_iters, ula_stepsize=h)
+        stats   = (
+            h_upper_bound                    = exp(ℓh_upper),
+            h_lower_bound                    = exp(ℓh_lower),
+            interval_objective_evaluations   = n_upper_bound_evals + n_lower_bound_evals,
+            golden_section_search_iterations = n_gss_iters,
+            ula_stepsize                     = h
+        )
 
         return sampler, stats
     end

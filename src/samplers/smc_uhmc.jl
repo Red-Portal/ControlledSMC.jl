@@ -61,8 +61,8 @@ function mutate_with_potential(
     vthalf = sqrt1mα * vtm1 + sqrt(α) * unwhiten(M, randn(rng, size(vtm1)))
     xt, vt = leapfrog(πt, xtm1, vthalf, ϵ, M)
 
-    ℓπt     = LogDensityProblems.logdensity(πt, xt)
-    ℓπtm1   = LogDensityProblems.logdensity(πtm1, xtm1)
+    ℓπt     = logdensity_safe(πt, xt)
+    ℓπtm1   = logdensity_safe(πtm1, xtm1)
     ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 
@@ -72,6 +72,51 @@ function mutate_with_potential(
     ℓk = logpdf(K, vthalf)
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
     return vcat(xt, vt), ℓG, NamedTuple()
+end
+
+function coordinate_descent_uhmc(
+    obj, ρ, ℓh, ρ_grid;
+    n_max_iters          = 32,
+    ℓh_change_coeff      = 0.02,
+    ℓh_change_ratio      = 1.5,
+    abstol               = 1e-2,
+)
+    n_obj_evals     = 0
+    coordesc_iters  = 0
+    coordesc_abstol = 1e-2
+    n_iters         = 1
+
+    while true
+        obj_ℓh = ℓh′ -> obj([ℓh′, ρ])
+        ℓh_upper, _, n_upper_bound_evals = find_golden_section_search_interval(
+            obj_ℓh, ℓh, ℓh_change_coeff, ℓh_change_ratio
+        )
+        ℓh_lower, _, n_lower_bound_evals = find_golden_section_search_interval(
+            obj_ℓh, ℓh_upper, -ℓh_change_coeff, ℓh_change_ratio
+        )
+        n_obj_evals += n_lower_bound_evals + n_upper_bound_evals
+
+        ℓh′, n_gss_iters = golden_section_search(
+            obj_ℓh, ℓh_lower, ℓh_upper; abstol
+        )
+        n_obj_evals += 2 * n_gss_iters
+
+        ρ′ = argmin(ρ′ -> obj([ℓh′, ρ′]), ρ_grid)
+        n_obj_evals += length(ρ_grid)
+
+        if max(abs(ℓh′ - ℓh), abs(ρ′ - ρ)) < coordesc_abstol ||
+            coordesc_iters == n_max_iters
+            ρ  = ρ′
+            ℓh = ℓh′
+            break
+        end
+
+        n_iters += 1
+
+        ρ  = ρ′
+        ℓh = ℓh′
+    end
+    return ρ, ℓh, (n_obj_evals=n_obj_evals, n_iters=n_iters,)
 end
 
 function adapt_sampler(
@@ -110,83 +155,46 @@ function adapt_sampler(
         ℓh_lower_guess = -7.5
         ρ_guess        = 0.5
 
+        obj_init_ℓh = ℓh′ -> obj_init([ℓh′, ρ_guess])
+
         ## Find any point that is not degenerate
         ℓh_decrease_stepsize = -1.0
         ℓh_lower, n_feasible_evals = find_feasible_point(
-            ℓh′ -> obj_init([ℓh′, ρ_guess]),
+            obj_init_ℓh,
             ℓh_lower_guess,
             ℓh_decrease_stepsize,
             log(eps(Float64)),
         )
 
-        ## Find remaining endpoint of an interval containing a (possibly local) minima
-        ℓh_upper_increase_coeff = 2.0
-        ℓh_upper_increase_ratio = 1.3
-        n_interval_max_iters = ceil(Int, log(ℓh_upper_increase_ratio, 15))
-        ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
-            ℓh′ -> obj_init([ℓh′, ρ_guess]),
-            ℓh_lower,
-            ℓh_upper_increase_coeff,
-            ℓh_upper_increase_ratio,
+        abstol = 1e-2
+        ℓh_upper_increase_coeff = 0.1
+        ℓh_upper_increase_ratio = 1.5
+        ℓh_upper, _, n_upper_bound_evals = find_golden_section_search_interval(
+            obj_init_ℓh, ℓh_lower, ℓh_upper_increase_coeff, ℓh_upper_increase_ratio
+        )
+        ℓh, n_gss_iters = golden_section_search(
+            obj_init_ℓh, ℓh_lower, ℓh_upper; abstol
         )
 
-        ## Properly optimize objective with the initial guess damping
-        gss_abstol = 1e-2
-        ℓh, n_gss_init_iters = golden_section_search(
-            ℓh′ -> obj_init([ℓh′, ρ_guess]), ℓh_lower, ℓh_upper; abstol=gss_abstol
-        )
+        ρ, ℓh, stats = coordinate_descent_uhmc(obj_init, ρ_guess, ℓh, ρ_grid; abstol)
 
-        ## Properly optimize objective with coordinate descent
-        ℓh_lower_coordesc, ℓh_upper_coordesc = ℓh - 1, ℓh + 1
-        ρ = ρ_guess
-        n_obj_evals = 0
-        coordesc_iters = 0
-        n_coordesc_max_iters = 32
-        coordesc_abstol = 1e-2
-
-        while true
-            ℓh′, n_gss_iters = golden_section_search(
-                ℓh′ -> obj_init([ℓh′, ρ]),
-                ℓh_lower_coordesc,
-                ℓh_upper_coordesc;
-                abstol=gss_abstol,
-            )
-            n_obj_evals += 2 * n_gss_iters
-
-            ρ′ = argmin(ρ′ -> obj_init([ℓh′, ρ′]), ρ_grid)
-            n_obj_evals += length(ρ_grid)
-
-            coordesc_iters += 1
-            if max(abs(ℓh′ - ℓh), abs(ρ′ - ρ)) < coordesc_abstol ||
-                coordesc_iters == n_coordesc_max_iters
-                ρ  = ρ′
-                ℓh = ℓh′
-                break
-            end
-
-            ρ  = ρ′
-            ℓh = ℓh′
-        end
-
-        h = exp(ℓh)
-
+        h     = exp(ℓh)
         stats = (
-            feasible_search_objective_evaluations       = n_feasible_evals,
-            gss_interval_search_objective_evaluations   = n_interval_evals,
-            initialization_search_objective_evaluations = 2 * n_gss_init_iters,
-            coordinate_descent_iterations               = coordesc_iters,
-            coordinate_descent_objective_evaluations    = n_obj_evals,
-            uhmc_stepsize                               = h,
-            uhmc_damping                                = ρ,
+            feasible_search_objective_evaluations    = n_feasible_evals,
+            upper_bound_search_objective_evaluations = n_upper_bound_evals,
+            initial_golden_section_search_iterations = n_gss_iters,
+            coordinate_descent_iterations            = stats.n_iters,
+            coordinate_descent_objective_evaluations = stats.n_obj_evals,
+            uhmc_stepsize                            = h,
+            uhmc_damping                             = ρ,
         )
 
         sampler = @set sampler.stepsizes[2] = h
         sampler = @set sampler.dampings[2] = ρ
         return sampler, stats
     else
-        ℓh_prev            = log(sampler.stepsizes[t - 1])
-        ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
-        ρ_prev             = sampler.dampings[t - 1]
+        ℓh_prev = log(sampler.stepsizes[t - 1])
+        ρ_prev  = sampler.dampings[t - 1]
 
         function obj(params)
             rng_fixed = copy(rng)
@@ -197,45 +205,17 @@ function adapt_sampler(
                    sampler.adaptor.regularization * abs2(ℓh_prev - params[1])
         end
 
-        # Coordinate descent
-        ℓh_lower_coordesc, ℓh_upper_coordesc = ℓh_prev - 1, ℓh_prev + 1
-        ℓh = ℓh_prev
-        ρ = ρ_prev
-        n_obj_evals = 0
-        coordesc_iters = 0
-        n_coordesc_max_iters = 16
-        coordesc_abstol = 1e-2
-        gss_abstol = 1e-2
+        ρ, ℓh, stats = coordinate_descent_uhmc(obj, ρ_prev, ℓh_prev, ρ_grid)
 
-        while true
-            ℓh′, n_gss_iters = golden_section_search(
-                ℓh′ -> obj([ℓh′, ρ]),
-                ℓh_lower_coordesc,
-                ℓh_upper_coordesc;
-                abstol=gss_abstol,
-            )
-            n_obj_evals += 2 * n_gss_iters
-
-            ρ′ = argmin(ρ′ -> obj([ℓh′, ρ′]), ρ_grid)
-            n_obj_evals += length(ρ_grid)
-
-            coordesc_iters += 1
-            if max(abs(ℓh′ - ℓh), abs(ρ′ - ρ)) < coordesc_abstol ||
-                coordesc_iters == n_coordesc_max_iters
-                ρ  = ρ′
-                ℓh = ℓh′
-                break
-            end
-
-            ρ  = ρ′
-            ℓh = ℓh′
-        end
-
-        h = exp(ℓh)
-
+        h       = exp(ℓh)
         sampler = @set sampler.stepsizes[t] = h
         sampler = @set sampler.dampings[t] = ρ
-        stats   = (uhmc_stepsize=exp(ℓh), uhmc_damping=ρ, coordinate_descent_iterations=coordesc_iters, coordinate_descent_objective_evaluations=n_obj_evals)
+        stats   = (
+            coordinate_descent_iterations            = stats.n_iters,
+            coordinate_descent_objective_evaluations = stats.n_obj_evals,
+            uhmc_stepsize                            = h,
+            uhmc_damping                             = ρ,
+        )
         return sampler, stats
     end
 end
