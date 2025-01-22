@@ -14,6 +14,7 @@ using StatsBase
 using StatsFuns
 
 include("dist.jl")
+include("funnel.jl")
 include("logistic.jl")
 include("lgcp.jl")
 include("brownian.jl")
