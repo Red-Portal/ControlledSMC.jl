@@ -67,7 +67,7 @@ function get_stan_model(model_name::String)
     end
     pdb  = PosteriorDB.database()
     post = PosteriorDB.posterior(pdb, model_name)
-    LoadStanProblem(post, ".stan/"; force=true)
+    LoadStanProblem(post, ".stan/"; force=true, nan_on_error=true)
 end
 
 function prepare_sampler(sampler::SMCULA, d, n_iters)
@@ -94,6 +94,17 @@ function run_smc(
     n_reps;
     show_progress=false,
 )
+    @info("loading stan models...")
+    for pid in procs()
+        task = @spawnat pid begin
+            if prob isa String
+                get_stan_model(prob)
+            end
+        end
+        fetch(task)
+    end
+    @info("loading stan models... - done!")
+
     @showprogress pmap(1:n_reps) do key
         seed = (0x38bef07cf9cc549d, 0x49e2430080b3f797)
         rng  = Philox4x(UInt64, seed, 8)
@@ -173,7 +184,7 @@ function run_smc(
     end
 end
 
-function run_posteriordb_experiments()
+function run_posteriordb_experiments(; show_progress=true)
     fname = "data/raw/posteriordb_experiments.jld2"
 
     n_particles = 1024
@@ -249,11 +260,11 @@ function run_posteriordb_experiments()
         (samplername, sampler) in [
             (:SMCULA, SMCULA(
                 1.0, 1, TimeCorrectForwardKernel(), Eye(1),
-                AnnealedFlowTransport(; n_subsample=128, regularization=0.1)
+                AnnealedFlowTransport(; n_subsample=n_subsample, regularization=0.1)
             )),
             (:SMCUHMC, SMCUHMC(
                 1.0, 1.0, 1, Eye(1),
-                AnnealedFlowTransport(; n_subsample=128, regularization=10.0)
+                AnnealedFlowTransport(; n_subsample=n_subsample, regularization=10.0)
             ))
         ]
         
@@ -271,23 +282,19 @@ function run_posteriordb_experiments()
         else
             @info("Running", config...)
             try
-                data[config] = :running
-                res          = run_smc(name, adtype, sampler, n_particles, n_iters, n_reps; show_progress=true)
+                res          = run_smc(name, adtype, sampler, n_particles, n_iters, n_reps; show_progress)
                 data         = JLD2.load(fname, "data")
                 data[config] = res
                 JLD2.save(fname, "data", data, "metadata", metadata)
             catch e
                 @warn "$(name) failed:\n$(e)"
-                data         = JLD2.load(fname, "data")
-                data[config] = e
-                JLD2.save(fname, "data", data, "metadata", metadata)
             end
         end
     end
 end
 
-function run_custom_experiments()
-    fname = "data/raw/posteriordb_experiments.jld2"
+function run_logdensityproblems_experiments(; show_progress=true)
+    fname = "data/raw/logdensityproblems_experiments.jld2"
 
     n_particles = 1024
     n_reps      = 32
@@ -305,22 +312,28 @@ function run_custom_experiments()
         JLD2.save(fname, "data", Dict(), "metadata", metadata)
     end
 
-    for name in [],
-        (n_particles, n_subsample) in [ (256, 32),
-                                        (1024, 128)],
+    for (probname, prob) in [
+            ("funnel",   Funnel(9)),
+            ("sonar",    LogisticRegressionSonar()),
+            ("brownian", BrownianMotion()),
+        ],
+        (n_particles, n_subsample) in [
+            (256, 32),
+            (1024, 128)
+        ],
         (samplername, sampler) in [
             (:SMCULA, SMCULA(
                 1.0, 1, TimeCorrectForwardKernel(), Eye(1),
-                AnnealedFlowTransport(; n_subsample=128, regularization=0.1)
+                AnnealedFlowTransport(; n_subsample=n_subsample, regularization=0.1)
             )),
             (:SMCUHMC, SMCUHMC(
                 1.0, 1.0, 1, Eye(1),
-                AnnealedFlowTransport(; n_subsample=128, regularization=10.0)
+                AnnealedFlowTransport(; n_subsample=n_subsample, regularization=10.0)
             ))
         ]
         
         config = (
-            name        = name,
+            name        = probname,
             sampler     = samplername,
             n_iters     = n_iters,
             n_particles = n_particles,
@@ -333,21 +346,29 @@ function run_custom_experiments()
         else
             @info("Running", config...)
             try
-                data[config] = :running
-                res          = run_smc(name, adtype, sampler, n_particles, n_iters, n_reps; show_progress=true)
+                res          = run_smc(prob, adtype, sampler, n_particles, n_iters, n_reps; show_progress)
                 data         = JLD2.load(fname, "data")
                 data[config] = res
                 JLD2.save(fname, "data", data, "metadata", metadata)
             catch e
                 @warn "$(name) failed:\n$(e)"
-                data         = JLD2.load(fname, "data")
-                data[config] = e
-                JLD2.save(fname, "data", data, "metadata", metadata)
             end
         end
     end
 end
 
-function main()
-    run_posteriordb_experiments()
+function main(; task = nothing, show_progress = true)
+    task = if isnothing(task) && haskey(ENV, "TASK") && ENV["TASK"] == "POSTERIORDB"
+        :posteriordb
+    elseif isnothing(task) && haskey(ENV, "TASK") && ENV["TASK"] == "LOGDENSITYPROBLEMS"
+        :logdensityproblems
+    else
+        task
+    end
+
+    if task == :posteriordb
+        run_posteriordb_experiments(; show_progress)
+    elseif task == :logdensityproblems
+        run_logdensityproblems_experiments(; show_progress)
+    end
 end
