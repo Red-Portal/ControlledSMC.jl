@@ -173,6 +173,7 @@ function find_golden_section_search_interval(f, a::Real, δ::Real, r::Real)
     while y0 ≥ y
         b = a + δ * r^k
         y′ = f(b)
+
         if !isfinite(y′)
             @warn "Degenerate objective value f(x) = $y′ for x = $b encountered during golden section search initial interval search."
             return a + δ * r^(k - 1), k

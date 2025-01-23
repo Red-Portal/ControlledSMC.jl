@@ -71,7 +71,6 @@ function sample(
         ancestors, resampled = resample(rng, ℓw_norm, ess, threshold)
 
         if !isfinite(ess)
-            println(ℓG)
             throw(ErrorException("The ESS is NaN. Something is broken. Most likely all particles degenerated."))
         end
 

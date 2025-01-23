@@ -19,7 +19,7 @@ function SMCUHMC(
     n_steps::Int,
     mass_matrix::AbstractMatrix,
     adaptor::AbstractAdaptor;
-    damping_grid::AbstractVector=[0.01, 0.99],
+    damping_grid::AbstractVector=[0.1, 0.9],
 )
     stepsizes = Fill(stepsize, n_steps)
     dampings  = Fill(damping, n_steps)

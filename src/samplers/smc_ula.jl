@@ -143,8 +143,8 @@ function adapt_sampler(
         )
 
         ## Find remaining endpoint of an interval containing a (possibly local) minima
-        ℓh_upper_increase_coeff = 0.1
-        ℓh_upper_increase_ratio = 1.5
+        ℓh_upper_increase_coeff = 0.2
+        ℓh_upper_increase_ratio = 1.2
         ℓh_upper, n_interval_evals = find_golden_section_search_interval(
             obj_init, ℓh_lower, ℓh_upper_increase_coeff, ℓh_upper_increase_ratio
         )
@@ -153,14 +153,9 @@ function adapt_sampler(
         ℓh, n_gss_iters = golden_section_search(obj_init, ℓh_lower, ℓh_upper; abstol=1e-2)
         h = exp(ℓh)
 
-        # ℓh_range = range(-15, 0; length=32)
-        # obj_range = @showprogress map(obj_init, ℓh_range)
-        # Plots.plot(ℓh_range, obj_range, yscale=:log10) |> display
-        # Plots.vline!([ℓh_lower, ℓh_upper]) |> display
-        # Plots.vline!([ℓh]) |> display
-        # throw()
-
         stats = (
+            ℓh_lower_bound                              = ℓh_lower,                  
+            ℓh_upper_bound                              = ℓh_upper,
             feasible_search_objective_evaluations       = n_feasible_evals,
             initialization_objective_evaluations        = n_interval_evals,
             golden_section_search_objective_evaluations = n_gss_iters,
@@ -183,8 +178,8 @@ function adapt_sampler(
                    sampler.adaptor.regularization * abs2(ℓh′ - ℓh_prev)
         end
 
-        ℓh_change_coeff = 0.1
-        ℓh_change_ratio = 1.5
+        ℓh_change_coeff = 0.2
+        ℓh_change_ratio = 1.2
         ℓh_upper, n_upper_bound_evals = find_golden_section_search_interval(
             obj, ℓh_prev, ℓh_change_coeff, ℓh_change_ratio
         )
