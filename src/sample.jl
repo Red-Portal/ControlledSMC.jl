@@ -61,12 +61,19 @@ function sample(
         sampler, stat = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
         x, ℓG, aux    = mutate_with_potential(rng, sampler, t, target, target_prev, x)
 
+        ℓG = @. ifelse(isfinite(ℓG), ℓG, -Inf)
+
         stat′ = log_potential_moments(ℓw, ℓG)
         stat = merge(stat′, stat)
 
         ℓw                   = ℓw + ℓG
         ℓw_norm, ess         = normalize_weights(ℓw)
         ancestors, resampled = resample(rng, ℓw_norm, ess, threshold)
+
+        if !isfinite(ess)
+            println(ℓG)
+            throw(ErrorException("The ESS is NaN. Something is broken. Most likely all particles degenerated."))
+        end
 
         if resampled || t == n_iters
             ℓZ = update_log_normalizer(ℓZ, ℓw)

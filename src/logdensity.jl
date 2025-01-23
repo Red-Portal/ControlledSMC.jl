@@ -11,7 +11,7 @@ end
 
 function logdensity_gradient_safe(prob, x::AbstractVector)
     ℓπ, ∇ℓπt = LogDensityProblems.logdensity_and_gradient(prob, x)
-    return ifelse(isfinite(ℓπ), ∇ℓπt, zero(∇ℓπt))
+    return ifelse(isfinite(ℓπ), ∇ℓπt, Fill(Inf, length(∇ℓπt)))
 end
 
 function logdensity_gradient_safe(prob, xs::AbstractMatrix)

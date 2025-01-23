@@ -88,10 +88,10 @@ function coordinate_descent_uhmc(
 
     while true
         obj_ℓh = ℓh′ -> obj([ℓh′, ρ])
-        ℓh_upper, _, n_upper_bound_evals = find_golden_section_search_interval(
+        ℓh_upper, n_upper_bound_evals = find_golden_section_search_interval(
             obj_ℓh, ℓh, ℓh_change_coeff, ℓh_change_ratio
         )
-        ℓh_lower, _, n_lower_bound_evals = find_golden_section_search_interval(
+        ℓh_lower, n_lower_bound_evals = find_golden_section_search_interval(
             obj_ℓh, ℓh_upper, -ℓh_change_coeff, ℓh_change_ratio
         )
         n_obj_evals += n_lower_bound_evals + n_upper_bound_evals
@@ -153,7 +153,7 @@ function adapt_sampler(
         end
 
         ℓh_lower_guess = -7.5
-        ρ_guess        = 0.5
+        ρ_guess        = 0.01
 
         obj_init_ℓh = ℓh′ -> obj_init([ℓh′, ρ_guess])
 
@@ -167,6 +167,9 @@ function adapt_sampler(
         )
 
         ρ, ℓh, stats = coordinate_descent_uhmc(obj_init, ρ_guess, ℓh_lower, ρ_grid)
+
+        # Consume rngs so that the actual mutation is less biased.
+        rand(rng, size(xtm1))
 
         h     = exp(ℓh)
         stats = (
@@ -194,6 +197,9 @@ function adapt_sampler(
         end
 
         ρ, ℓh, stats = coordinate_descent_uhmc(obj, ρ_prev, ℓh_prev, ρ_grid)
+
+        # Consume rngs so that the actual mutation is less biased.
+        rand(rng, size(xtm1))
 
         h       = exp(ℓh)
         sampler = @set sampler.stepsizes[t] = h

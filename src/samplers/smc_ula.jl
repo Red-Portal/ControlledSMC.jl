@@ -145,7 +145,7 @@ function adapt_sampler(
         ## Find remaining endpoint of an interval containing a (possibly local) minima
         ℓh_upper_increase_coeff = 0.1
         ℓh_upper_increase_ratio = 1.5
-        ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
+        ℓh_upper, n_interval_evals = find_golden_section_search_interval(
             obj_init, ℓh_lower, ℓh_upper_increase_coeff, ℓh_upper_increase_ratio
         )
 
@@ -167,6 +167,9 @@ function adapt_sampler(
             ula_stepsize                                = h,
         )
 
+        # Consume rngs so that the actual mutation is less biased.
+        rand(rng, size(xtm1))
+
         sampler = @set sampler.stepsizes[2] = h
         return sampler, stats
     else
@@ -182,14 +185,17 @@ function adapt_sampler(
 
         ℓh_change_coeff = 0.1
         ℓh_change_ratio = 1.5
-        ℓh_upper, _, n_upper_bound_evals = find_golden_section_search_interval(
+        ℓh_upper, n_upper_bound_evals = find_golden_section_search_interval(
             obj, ℓh_prev, ℓh_change_coeff, ℓh_change_ratio
         )
-        ℓh_lower, _, n_lower_bound_evals = find_golden_section_search_interval(
+        ℓh_lower, n_lower_bound_evals = find_golden_section_search_interval(
             obj, ℓh_upper, -ℓh_change_coeff, ℓh_change_ratio
         )
 
         ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=1e-2)
+
+        # Consume rngs so that the actual mutation is less biased.
+        rand(rng, size(xtm1))
 
         h       = exp(ℓh)
         sampler = @set sampler.stepsizes[t] = h
