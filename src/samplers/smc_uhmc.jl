@@ -158,7 +158,7 @@ function adapt_sampler(
         obj_init_ℓh = ℓh′ -> obj_init([ℓh′, ρ_guess])
 
         ## Find any point that is not degenerate
-        ℓh_decrease_stepsize = -1.0
+        ℓh_decrease_stepsize = 1
         ℓh_lower, n_feasible_evals = find_feasible_point(
             obj_init_ℓh,
             ℓh_lower_guess,

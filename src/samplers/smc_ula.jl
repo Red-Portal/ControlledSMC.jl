@@ -137,7 +137,7 @@ function adapt_sampler(
         ℓh_lower_guess = -15.0
 
         ## Find any point between 1e-10 and 2e-16 that is not degenerate
-        ℓh_decrease_stepsize = -1
+        ℓh_decrease_stepsize = 1
         ℓh_lower, n_feasible_evals = find_feasible_point(
             obj_init, ℓh_lower_guess, ℓh_decrease_stepsize, log(eps(Float64))
         )

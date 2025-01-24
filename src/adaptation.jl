@@ -127,7 +127,7 @@ function find_feasible_point(f, x0::Real, stepsize::Real, lb::Real)
         end
     end
     throw(
-        errorexception(
+        ErrorException(
             "could not find a fesible initial stepsize after $(n_eval) steps: x = $(x), f(x) = $(y), lb = $(lb)",
         ),
     )
