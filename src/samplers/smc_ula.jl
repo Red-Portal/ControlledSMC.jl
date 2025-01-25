@@ -11,6 +11,8 @@ struct SMCULA{
     adaptor   :: Adaptor
 end
 
+@functor SMCULA (stepsizes,)
+
 function SMCULA(
     stepsize::Real,
     n_steps::Int,

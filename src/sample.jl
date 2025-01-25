@@ -20,6 +20,12 @@ function adapt_sampler(
     return sampler
 end
 
+function incremental_elbo(ℓw, ℓG)
+    ∑ℓw     = logsumexp(ℓw)
+    ℓw_norm = ℓw .- ∑ℓw
+    dot(exp.(ℓw_norm), ℓG)
+end
+
 function sample(
     rng::Random.AbstractRNG,
     sampler::AbstractSMC,
@@ -38,6 +44,7 @@ function sample(
     x, ℓG = rand_initial_with_potential(rng, sampler, path, n_particles)
     ℓZ    = zero(eltype(x))
     ℓw    = ℓG
+    ∑elbo = zero(eltype(x))
 
     ℓw_norm, ess         = normalize_weights(ℓw)
     ancestors, resampled = resample(rng, ℓw_norm, ess, threshold)
@@ -67,8 +74,11 @@ function sample(
         stat = merge(stat′, stat)
 
         ℓw                   = ℓw + ℓG
+        ∑elbo                = incremental_elbo(ℓw, ℓG)
         ℓw_norm, ess         = normalize_weights(ℓw)
-        ancestors, resampled = resample(rng, ℓw_norm, ess, threshold)
+
+        ess_nodiff = ChainRulesCore.ignore_derivatives(ess) 
+        ancestors, resampled = resample(rng, ℓw_norm, ess_nodiff, threshold)
 
         if !isfinite(ess)
             throw(ErrorException("The ESS is NaN. Something is broken. Most likely all particles degenerated."))
@@ -86,7 +96,7 @@ function sample(
 
         target_prev = target
         state = merge((particles=x, log_potential=ℓG), aux)
-        stat = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), stat)
+        stat = merge((iteration=t, ess=ess, log_normalizer=ℓZ, elbo=∑elbo, resampled=resampled), stat)
         push!(states, state)
         push!(stats, stat)
         pm_next!(prog, last(stats))

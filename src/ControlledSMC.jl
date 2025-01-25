@@ -3,10 +3,12 @@ module ControlledSMC
 
 using ADTypes
 using Accessors
+using ChainRulesCore
 using DifferentiationInterface
 using Distributions
 using FillArrays
 using ForwardDiff
+using Functors
 using Interpolations
 using LinearAlgebra
 using LogDensityProblems
