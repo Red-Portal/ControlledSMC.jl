@@ -19,12 +19,14 @@ function systematic_sampling(
     return resample_idx
 end
 
+@non_differentiable systematic_sampling(::Random.AbstractRNG, ::AbstractVector, ::Int)
+
 function resample(
     rng::Random.AbstractRNG, ℓw_norm::AbstractVector, ess::Real, threshold::Real
 )
     N = length(ℓw_norm)
     if ess < N * threshold
-        ancestors = systematic_sampling(rng, exp.(ℓw_norm))
+        ancestors = systematic_sampling(rng, exp.(ℓw_norm))  
         resampled = true
         ancestors, resampled
     else

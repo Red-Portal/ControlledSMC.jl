@@ -36,6 +36,8 @@ function sample(
 )
     @assert 0 ≤ threshold ≤ 1
 
+    ∑elbo = 0.0
+    
     n_iters = length(path)
     states  = NamedTuple[]
     stats   = NamedTuple[]
@@ -44,23 +46,27 @@ function sample(
     x, ℓG = rand_initial_with_potential(rng, sampler, path, n_particles)
     ℓZ    = zero(eltype(x))
     ℓw    = ℓG
-    ∑elbo = zero(eltype(x))
 
     ℓw_norm, ess         = normalize_weights(ℓw)
     ancestors, resampled = resample(rng, ℓw_norm, ess, threshold)
 
-    if resampled
-        ℓZ = update_log_normalizer(ℓZ, ℓw)
-        x  = x[:, ancestors]
-        ℓw = zeros(eltype(x), n_particles)
-        ℓG = ℓG[ancestors]
+    ignore_derivatives() do
+        if resampled
+            ℓZ = update_log_normalizer(ℓZ, ℓw)
+            x  = x[:, ancestors]
+            ℓw = zeros(eltype(x), n_particles)
+            ℓG = ℓG[ancestors]
+        end
     end
 
     state = (particles=x, ancestors=ancestors, log_potential=ℓG)
     stat  = (iteration=1, ess=n_particles, log_normalizer=ℓZ, resampled=resampled)
-    push!(states, state)
-    push!(stats, stat)
-    pm_next!(prog, last(stats))
+
+    ignore_derivatives() do
+        push!(states, state)
+        push!(stats, stat)
+        pm_next!(prog, last(stats))
+    end
 
     target_prev = get_target(path, 1)
     for t in 2:n_iters
@@ -73,11 +79,11 @@ function sample(
         stat′ = log_potential_moments(ℓw, ℓG)
         stat = merge(stat′, stat)
 
-        ℓw                   = ℓw + ℓG
-        ∑elbo                = incremental_elbo(ℓw, ℓG)
-        ℓw_norm, ess         = normalize_weights(ℓw)
+        ℓw           = ℓw + ℓG
+        ∑elbo        = incremental_elbo(ℓw, ℓG)
+        ℓw_norm, ess = normalize_weights(ℓw)
 
-        ess_nodiff = ChainRulesCore.ignore_derivatives(ess) 
+        ess_nodiff = ignore_derivatives(ess) 
         ancestors, resampled = resample(rng, ℓw_norm, ess_nodiff, threshold)
 
         if !isfinite(ess)
@@ -89,20 +95,25 @@ function sample(
         end
 
         if resampled
+            ℓw_rsp          = ℓw[ancestors]
+            score_grad_term = ℓw_rsp - ignore_derivatives(ℓw_rsp)
+
             x  = x[:, ancestors]
-            ℓw = zeros(eltype(x), n_particles)
+            ℓw = score_grad_term
             ℓG = ℓG[ancestors]
         end
 
         target_prev = target
-        state = merge((particles=x, log_potential=ℓG), aux)
-        stat = merge((iteration=t, ess=ess, log_normalizer=ℓZ, elbo=∑elbo, resampled=resampled), stat)
-        push!(states, state)
-        push!(stats, stat)
-        pm_next!(prog, last(stats))
+        ignore_derivatives() do
+            state = merge((particles=x, log_potential=ℓG), aux)
+            stat = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), stat)
+            push!(states, state)
+            push!(stats, stat)
+            pm_next!(prog, last(stats))
+        end
     end
     ℓw_norm, _ = normalize_weights(ℓw)
-    return x, ℓw_norm, sampler, states, stats
+    return x, ℓw_norm, sampler, states, stats, ∑elbo
 end
 
 function sample(

@@ -4,3 +4,5 @@ function pm_next!(pm, stats::NamedTuple)
 end
 
 @non_differentiable pm_next!(::Any, ::NamedTuple)
+
+@non_differentiable ProgressMeter.Progress(::Any)

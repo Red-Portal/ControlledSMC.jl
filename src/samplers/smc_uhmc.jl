@@ -13,6 +13,8 @@ struct SMCUHMC{
     damping_grid :: DampingGrid
 end
 
+@functor SMCUHMC (stepsizes, dampings,)
+
 function SMCUHMC(
     stepsize::Real,
     damping::Real,
@@ -66,10 +68,12 @@ function mutate_with_potential(
     ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 
-    L  = BatchMvNormal(sqrt1mα * vthalf, α * M)
-    K  = BatchMvNormal(sqrt1mα * vtm1, α * M)
-    ℓl = logpdf(L, vtm1)
-    ℓk = logpdf(K, vthalf)
+    L  = MvNormal.(eachcol(sqrt1mα * vthalf), sqrt(α))
+    K  = MvNormal.(eachcol(sqrt1mα * vtm1), sqrt(α))
+    #L  = BatchMvNormal(sqrt1mα * vthalf, α * M)
+    #K  = BatchMvNormal(sqrt1mα * vtm1, α * M)
+    ℓl = logpdf.(L, eachcol(vtm1))
+    ℓk = logpdf.(K, eachcol(vthalf))
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
     return vcat(xt, vt), ℓG, NamedTuple()
 end

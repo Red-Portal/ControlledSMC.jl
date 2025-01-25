@@ -47,14 +47,15 @@ function LogDensityProblems.logdensity_gradient_and_hessian(
     prob::AnnealedDensityProblem, x::AbstractVector
 )
     (; annealing, proposal, problem, adtype) = prob
-    ℓπ0, ∇ℓπ0 = value_and_gradient(Base.Fix1(logpdf, proposal), adtype, x)
-    ℓπT, ∇ℓπT, ∇2ℓπT = LogDensityProblems.logdensity_gradient_and_hessian(problem, x)
+    ℓπ0, ∇ℓπ0, ∇2ℓπ0 = value_gradient_and_hessian(Base.Fix1(logpdf, proposal), adtype, x)
+    #ℓπT, ∇ℓπT, ∇2ℓπT = LogDensityProblems.logdensity_gradient_and_hessian(problem, x)
+    ℓπT, ∇ℓπT, ∇2ℓπT = value_gradient_and_hessian(Base.Fix1(LogDensityProblems.logdensity, problem), adtype, x)
     ℓπt = anneal(annealing, ℓπ0, ℓπT)
     ∇ℓπt = anneal(annealing, ∇ℓπ0, ∇ℓπT)
-    ∇ℓπt = anneal(annealing, ∇2ℓπ0, ∇2ℓπT)
+    ∇2ℓπt = anneal(annealing, ∇2ℓπ0, ∇2ℓπT)
     if isfinite(ℓπt)
-        return ℓπt, ∇ℓπt
+        return ℓπt, ∇ℓπt, ∇2ℓπt
     else
-        return ℓπt, Fill(-Inf, size(∇ℓπt))
+        return ℓπt, Fill(-Inf, size(∇ℓπt)), Fill(-Inf, size(∇2ℓπt))
     end
 end

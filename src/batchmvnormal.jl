@@ -36,8 +36,9 @@ function Distributions.logpdf(
     @assert size(μ, 1) == size(x, 1)
     @assert size(μ, 1) == size(Σ, 1)
 
-    d          = size(μ, 1)
-    ℓdetΣ      = logdet(Σ)
-    r2         = invquad(Σ, x - μ)
-    return @. (r2 + ℓdetΣ + d * log(2π)) / -2
+    d     = size(x, 1)
+    ℓdetΣ = logdet(Σ)
+    r2    = invquad(Σ, x - μ)
+    logZ  = d * log(2π)
+    return @. (r2 + ℓdetΣ + logZ) / -2
 end

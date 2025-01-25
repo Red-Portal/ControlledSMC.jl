@@ -62,18 +62,18 @@ function potential_with_backward(
 
     ht, Γ  = stepsizes[t], precond
     ℓπt_xt = logdensity_safe(πt, xt)
-    q_fwd  = gradient_flow_euler(πt, xtm1, ht, Γ)
-    K      = BatchMvNormal(q_fwd, 2 * ht * Γ)
-    ℓk     = logpdf(K, xt)
+    q_fwd  = gradient_flow_euler(πt, xtm1, ht, 1.0)
+    K      = MvNormal.(eachcol(q_fwd), Ref(sqrt(2 * ht)))
+    ℓk     = logpdf.(K, eachcol(xt))
 
     if t == 2
         return ℓπt_xt - ℓk
     else
         htm1       = stepsizes[t - 1]
         ℓπtm1_xtm1 = logdensity_safe(πtm1, xtm1)
-        q_bwd      = gradient_flow_euler(πtm1, xt, htm1, Γ)
-        L          = BatchMvNormal(q_bwd, 2 * htm1 * Γ)
-        ℓl         = logpdf(L, xtm1)
+        q_bwd      = gradient_flow_euler(πtm1, xt, htm1, 1.0)
+        L          = MvNormal.(eachcol(q_bwd), Ref(sqrt(2 * htm1)))
+        ℓl         = logpdf.(L, eachcol(xtm1))
         return ℓπt_xt + ℓl - ℓπtm1_xtm1 - ℓk
     end
 end
