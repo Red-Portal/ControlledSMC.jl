@@ -8,11 +8,16 @@ function rand_initial_with_potential(
 end
 
 function log_potential_moments(ℓw::AbstractVector, ℓG::AbstractVector)
-    N   = length(ℓw)
     ℓ∑w = logsumexp(ℓw)
     ℓG1 = logsumexp(ℓw + ℓG) - ℓ∑w
-    ℓG2 = logsumexp(ℓw + 2*ℓG) - ℓ∑w
-    (log_potential_moments=(ℓG1, ℓG2),)
+    ℓG2 = logsumexp(ℓw + 2 * ℓG) - ℓ∑w
+    return (log_potential_moments=(ℓG1, ℓG2),)
+end
+
+function adapt_sampler(
+    ::AbstractRNG, sampler, ::Int, ::Any, ::Any, ::AbstractMatrix, ::AbstractVector
+)
+    return sampler
 end
 
 function sample(
@@ -48,17 +53,26 @@ function sample(
     stat  = (iteration=1, ess=n_particles, log_normalizer=ℓZ, resampled=resampled)
     push!(states, state)
     push!(stats, stat)
+    pm_next!(prog, last(stats))
 
     target_prev = get_target(path, 1)
     for t in 2:n_iters
-        target     = get_target(path, t)
-        x, ℓG, aux = mutate_with_potential(rng, sampler, t, target, target_prev, x)
+        target        = get_target(path, t)
+        sampler, stat = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
+        x, ℓG, aux    = mutate_with_potential(rng, sampler, t, target, target_prev, x)
 
-        stat = log_potential_moments(ℓw, ℓG)
+        ℓG = @. ifelse(isfinite(ℓG), ℓG, -Inf)
+
+        stat′ = log_potential_moments(ℓw, ℓG)
+        stat = merge(stat′, stat)
 
         ℓw                   = ℓw + ℓG
         ℓw_norm, ess         = normalize_weights(ℓw)
         ancestors, resampled = resample(rng, ℓw_norm, ess, threshold)
+
+        if !isfinite(ess)
+            throw(ErrorException("The ESS is NaN. Something is broken. Most likely all particles degenerated."))
+        end
 
         if resampled || t == n_iters
             ℓZ = update_log_normalizer(ℓZ, ℓw)
@@ -71,14 +85,14 @@ function sample(
         end
 
         target_prev = target
-        state = merge((particles=x, log_potential=ℓG,), state)
-        stat  = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), stat)
+        state = merge((particles=x, log_potential=ℓG), aux)
+        stat = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), stat)
         push!(states, state)
         push!(stats, stat)
         pm_next!(prog, last(stats))
     end
     ℓw_norm, _ = normalize_weights(ℓw)
-    return x, ℓw_norm, states, stats
+    return x, ℓw_norm, sampler, states, stats
 end
 
 function sample(

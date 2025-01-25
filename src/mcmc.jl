@@ -1,13 +1,13 @@
 
 function gradient_flow_euler(π, x::AbstractMatrix, h::Real, Γ)
-    ∇U = -logdensity_gradient(π, x)
+    ∇U = -logdensity_gradient_safe(π, x)
     return x - h * Γ * ∇U
 end
 
 function leapfrog(target, x::AbstractMatrix, v::AbstractMatrix, δ::Real, M::AbstractMatrix)
-    v′ = v + δ / 2 * logdensity_gradient(target, x)
+    v′ = v + δ / 2 * logdensity_gradient_safe(target, x)
     x′ = x + δ * (M \ v′)
-    v′′ = v′ + δ / 2 * logdensity_gradient(target, x′)
+    v′′ = v′ + δ / 2 * logdensity_gradient_safe(target, x′)
     return x′, v′′
 end
 
@@ -16,7 +16,7 @@ function klmc_mean(
 )
     γ, h = damping, stepsize
     η    = exp(-γ * h)
-    ∇U   = -logdensity_gradient(target, x)
+    ∇U   = -logdensity_gradient_safe(target, x)
     μx   = x + (1 - η) / γ * v - (h - (1 - η) / γ) / γ * ∇U
     μv   = η * v - (1 - η) / γ * ∇U
     return BatchVectors2(μx, μv)

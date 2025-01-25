@@ -6,16 +6,17 @@ using Accessors
 using DifferentiationInterface
 using Distributions
 using FillArrays
-using DataInterpolations
+using ForwardDiff
+using Interpolations
 using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
-using Optim
 using PDMats
 using ProgressMeter
 using Random
 using ReverseDiff
 using Statistics
+using StatsBase
 using UnicodePlots
 
 abstract type AbstractSMC end
@@ -36,6 +37,17 @@ include("utils.jl")
 include("batchmvnormal.jl")
 include("logdensity.jl")
 
+include("adaptation.jl")
+export
+    NoAdaptation,
+    CondESSMax,
+    ForwardKLMin,
+    BackwardKLMin,
+    ChiSquareMin,
+    AnnealedFlowTransport,
+    AcceptanceRateCtrl,
+    ESJDMax
+
 # Target Paths
 include("paths/annealing.jl")
 
@@ -54,6 +66,15 @@ export sample
 
 include("samplers/smc_ula.jl")
 export SMCULA
+
+include("samplers/smc_mala.jl")
+export SMCMALA
+
+include("samplers/smc_ubarker.jl")
+export SMCUBarker
+
+include("samplers/smc_barker.jl")
+export SMCBarker
 
 include("samplers/smc_uhmc.jl")
 export SMCUHMC

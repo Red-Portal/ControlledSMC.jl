@@ -24,7 +24,7 @@ function LogDensityProblems.logdensity(prob::AnnealedDensityProblem, x::Abstract
     if isfinite(ℓπt)
         return ℓπt
     else
-        return zero(ℓπt)
+        return -Inf
     end
 end
 
@@ -39,6 +39,6 @@ function LogDensityProblems.logdensity_and_gradient(
     if isfinite(ℓπt)
         return ℓπt, ∇ℓπt
     else
-        return ℓπt, zero(∇ℓπt)
+        return ℓπt, Fill(-Inf, size(∇ℓπt))
     end
 end
