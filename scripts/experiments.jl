@@ -180,6 +180,7 @@ function run_smc(
             n_grad_evals    = n_grad_evals,
             n_density_evals = n_density_evals,
             log_normalizer  = ℓZs,
+            stats           = stats,
         )
     end
 end
@@ -187,14 +188,12 @@ end
 function run_posteriordb_experiments(; show_progress=true)
     fname = "data/raw/posteriordb_experiments.jld2"
 
-    n_particles = 1024
-    n_reps      = 32
-    n_iters     = 64
-    adtype      = AutoMooncake(; config=Mooncake.Config())
+    n_reps = 32
+    adtype = AutoMooncake(; config=Mooncake.Config())
 
     metadata = (
         samplers    = [:SMCULA, :SMCUHMC],
-        n_iters     = [64],
+        n_iters     = [16, 32, 64],
         n_particles = [1024, 256],
         n_subsample = [128, 32],
     )
@@ -255,6 +254,7 @@ function run_posteriordb_experiments(; show_progress=true)
         "bones_data-bones_model",
         "surgical_data-surgical_model",
         ]),
+        n_iters in [16, 32, 64],
         (n_particles, n_subsample) in [(256, 32),
                                        (1024, 128)],
         (samplername, sampler) in [
@@ -296,14 +296,12 @@ end
 function run_logdensityproblems_experiments(; show_progress=true)
     fname = "data/raw/logdensityproblems_experiments.jld2"
 
-    n_particles = 1024
-    n_reps      = 32
-    n_iters     = 64
-    adtype      = AutoMooncake(; config=Mooncake.Config())
+    n_reps = 32
+    adtype = AutoMooncake(; config=Mooncake.Config())
 
     metadata = (
         samplers    = [:SMCULA, :SMCUHMC],
-        n_iters     = [64],
+        n_iters     = [16, 32, 64],
         n_particles = [1024, 256],
         n_subsample = [128, 32],
     )
@@ -317,6 +315,7 @@ function run_logdensityproblems_experiments(; show_progress=true)
             ("sonar",    LogisticRegressionSonar()),
             ("brownian", BrownianMotion()),
         ],
+        n_iters in [16, 32, 64],
         (n_particles, n_subsample) in [
             (256, 32),
             (1024, 128)
