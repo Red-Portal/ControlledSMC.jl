@@ -95,8 +95,8 @@ function sample(
         end
 
         if resampled
-            ℓw_rsp          = ℓw[ancestors]
-            score_grad_term = ℓw_rsp - ignore_derivatives(ℓw_rsp)
+            ℓw_norm_rsp     = ℓw_norm[ancestors]
+            score_grad_term = ℓw_norm_rsp - ignore_derivatives(ℓw_norm_rsp)
 
             x  = x[:, ancestors]
             ℓw = score_grad_term
