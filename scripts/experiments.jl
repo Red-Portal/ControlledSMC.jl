@@ -1,6 +1,7 @@
 
 using ADTypes
 using Accessors
+using Base.GC
 using BridgeStan
 using Chain
 using ControlledSMC
@@ -171,6 +172,8 @@ function run_smc(
             push!(n_density_evals, prob_ad_tracked.n_density_evals)
             push!(ℓZs, last(stats_test).log_normalizer)
         end
+
+        GC.gc()
 
         return (
             sampler         = sampler,
