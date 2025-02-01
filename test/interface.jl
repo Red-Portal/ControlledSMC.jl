@@ -72,6 +72,6 @@ end
         ("SMCMALA", SMCMALA(path, AcceptanceRateControl(n_subsample=32, target_acceptance_rate=0.5, regularization=0.1); precond=Eye(d))),
         #("SMCKLMC", SMCKLMC(d, 0.0001, 1000.0, n_iters)),
     ]
-        ControlledSMC.sample(sampler, n_particles, 0.5; show_progress=true)
+        ControlledSMC.sample(sampler, n_particles, 0.5; show_progress=false)
     end
 end
