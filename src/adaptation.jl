@@ -61,68 +61,78 @@ function find_feasible_point(f, x0::Real, δ::Real, lb::Real)
     )
 end
 
-function golden_section_search(f, a::Real, b::Real; abstol::Real=1e-2)
+function golden_section_search(f, a::Real, b::Real, x::Real; abstol::Real=1e-2)
     ϕinv    = (√5 - 1) / 2
-    n_evals = 2
-    while true
-        c = b - (b - a) * ϕinv
-        d = a + (b - a) * ϕinv
+    ϕinvc   = 1 - ϕinv
+    n_evals = 0
 
-        if f(c) < f(d)
-            b = d
+    x0, x1, x2, x3 = a, 0, 0, b
+
+    if abs(b - x) > abs(x - a)
+        x1 = x
+        x2 = x + ϕinvc*(b - x)
+    else
+        x2 = x
+        x1 = x - ϕinvc*(x - a)
+    end
+
+    while abs(x1 - x2) ≥ abstol
+        f1 = f(x1)
+        f2 = f(x2)
+
+        n_evals += 2
+        if f2 < f1 || !isfinite(f1)
+            x0 = x1
+            x1 = x2
+            x2 = ϕinv*x2 + ϕinvc*x3
+            f1 = f2
+            f2 = f(x2)
+        elseif isfinite(f2)
+            x3 = x2
+            x2 = x1
+            x1 = ϕinv*x1 + ϕinvc*x0
+            f2 = f1
+            f1 = f(x1)
         else
-            a = c
-        end
-
-        if (b - a) ≤ abstol
-            break
-        end
-
-        if !isfinite(b + a)
             throw(
                 ErrorException(
-                    "Golden section search failed at b = $b, a = $a with f((a+b)/2) = $(f((a+b)/2))",
+                    "Golden section search failed at a = $a, b = $b, c = $c, d = $d, with f(c) = $fc, f(d) = $fd",
                 ),
             )
         end
-
-        n_evals += 2
     end
-    return (b + a) / 2, n_evals
+    return (x1 + x2) / 2, n_evals
 end
 
-function bracket_minimum(f, a::Real, c::Real, r::Real)
+function bracket_minimum(f, a::Real, c::Real, r::Real; n_max_iters::Int=100)
     @assert r > 1
 
-    b  = a
-    y0 = f(a)
-    y  = y0
-    k  = 0
-    n_evals = 2
-    while y0 ≥ y
+    y = f(a)
+    for k in 1:n_max_iters
         b = a + c * r^k
         y′ = f(b)
-        if !isfinite(y′)
-            return a + c * r^(k - 1), n_evals
-        elseif y < y′
-            break
+        if !isfinite(y′) || y < y′
+            return b, a + c * r^(k - 1), k
         end
-        y        = y′
-        k       += 1
-        n_evals += 1
+        y      = y′
     end
-    return a + c * r^k, n_evals
+    throw(
+        ErrorException(
+            "Bracket minimum didn't terminate within $(n_max_iters) iterations, where f(b) = $(y)",
+        )
+    )
 end
 
 function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
     n_eval_total = 0 
-    x_plus, n_eval  = bracket_minimum(f, x0, c, r)   
-    n_eval_total   += n_eval
 
-    x_minus, n_eval = bracket_minimum(f, x_plus, -c, r)   
-    n_eval_total   += n_eval
+    x_plus, _, n_eval  = bracket_minimum(f, x0, c, r)   
+    n_eval_total      += n_eval
 
-    x_opt, n_eval = golden_section_search(f, x_minus, x_plus; abstol=ϵ)
+    x_minus, x_int, n_eval = bracket_minimum(f, x_plus, -c, r)   
+    n_eval_total          += n_eval
+
+    x_opt, n_eval = golden_section_search(f, x_minus, x_plus, x_int; abstol=ϵ)
     n_eval_total += n_eval
 
     # x_viz = range(-15, 2; length=32)
@@ -132,6 +142,7 @@ function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
     # Plots.vline!([x_minus], label="x_minus") |> display
     # Plots.vline!([x_plus], label="x_plus") |> display
     # Plots.vline!([x_opt], label="x_opt") |> display
+    # Plots.vline!([x_int], label="x_int") |> display
 
     # if readline() == "n"
     #     throw()
