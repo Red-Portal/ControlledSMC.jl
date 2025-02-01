@@ -6,6 +6,7 @@ using DelimitedFiles
 using Distributions
 using FillArrays
 using KernelFunctions
+using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
 using PDMats
