@@ -194,15 +194,15 @@ function adapt_sampler(
     ρ_guess  = 0.1
     n_evals_total = 0
 
-    ℓh = if t == 1
+    ℓh, ρ = if t == 1
         ℓh, n_evals = find_feasible_point(
             ℓh_ -> obj(ℓh_, ρ_guess), ℓh_guess, δ, log(eps(eltype(ztm1)))
         )
         n_evals_total += n_evals
+        ℓh, ρ_guess
     else
-        sampler.stepsizes[t - 1]
+        sampler.stepsizes[t - 1], sampler.refresh_rates[t - 1]
     end
-    ρ = ρ_guess
 
     n_max_iters = 10
     i           = 0
