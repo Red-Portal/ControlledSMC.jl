@@ -10,8 +10,8 @@ function LogDensityProblems.logdensity(prob::BrownianMotion, θ)
     α_inn = softplus(θ[31])
     α_obs = softplus(θ[32])
 
-    ℓjac_α_inn = loglogistic(α_inn)
-    ℓjac_α_obs = loglogistic(α_obs)
+    ℓjac_α_inn = loglogistic(θ[31])
+    ℓjac_α_obs = loglogistic(θ[32])
 
     ℓp_α_inn = logpdf(LogNormal(0, 2), α_inn)
     ℓp_α_obs = logpdf(LogNormal(0, 2), α_obs)
