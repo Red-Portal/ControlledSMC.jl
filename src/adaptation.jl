@@ -1,20 +1,20 @@
 
 abstract type AbstractAdaptor end
 
-@kwdef struct BackwardKLMin{F<:Real} <: AbstractAdaptor
+@kwdef struct BackwardKLMin{Reg<:Real} <: AbstractAdaptor
     n_subsample::Int
-    regularization::F = 0.0
+    regularization::Reg = 0.0
 end
 
-@kwdef struct ESJDMax{F<:Real} <: AbstractAdaptor
+@kwdef struct ESJDMax{Reg<:Real} <: AbstractAdaptor
     n_subsample::Int
-    regularization::F = 0.0
+    regularization::Reg = 0.0
 end
 
-@kwdef struct AcceptanceRateControl{Acc<:Real,F<:Real} <: AbstractAdaptor
+@kwdef struct AcceptanceRateControl{Acc<:Real,Reg<:Real} <: AbstractAdaptor
     n_subsample::Int
     target_acceptance_rate::Acc
-    regularization::F = 0.0
+    regularization::Reg = 0.0
 end
 
 function adaptation_objective(
@@ -30,19 +30,12 @@ function adaptation_objective(
 end
 
 function adaptation_objective(
-    adaptor::AcceptanceRateControl,
-    ::AbstractVector,
-    ::AbstractVector,
-    ::AbstractVector,
-    log_acceptance_rate,
-    esjd,
+    adaptor::AcceptanceRateControl, log_acceptance_rate::Real, ::Real,
 )
     return (log_acceptance_rate - log(adaptor.target_acceptance_rate))^2
 end
 
-function adaptation_objective(
-    ::ESJDMax, ::AbstractVector, ::AbstractVector, ::AbstractVector, acceptance_rate, esjd
-)
+function adaptation_objective(::ESJDMax, ::Real, esjd::Real)
     return -esjd
 end
 

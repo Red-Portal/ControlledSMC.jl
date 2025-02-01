@@ -41,7 +41,8 @@ include("adaptation.jl")
 export
     NoAdaptation,
     BackwardKLMin,
-    AcceptanceRateControl
+    AcceptanceRateControl,
+    ESJDMax
 
 # Target Paths
 include("paths/annealing.jl")
@@ -62,14 +63,8 @@ export sample
 include("samplers/smc_ula.jl")
 export SMCULA
 
-#include("samplers/smc_mala.jl")
-#export SMCMALA
-
-# include("samplers/smc_ubarker.jl")
-# export SMCUBarker
-
-# include("samplers/smc_barker.jl")
-# export SMCBarker
+include("samplers/smc_mala.jl")
+export SMCMALA
 
 include("samplers/smc_uhmc.jl")
 export SMCUHMC

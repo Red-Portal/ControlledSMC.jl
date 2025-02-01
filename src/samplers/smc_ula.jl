@@ -161,7 +161,7 @@ function adapt_sampler(
 
     τ = sampler.adaptor.regularization
 
-    function obj_init(ℓh′)
+    function obj(ℓh′)
         rng_fixed    = copy(rng)
         sampler′     = @set sampler.stepsizes[t] = exp(ℓh′)
         _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
@@ -182,13 +182,13 @@ function adapt_sampler(
     n_evals_total = 0
 
     ℓh = if t == 1
-        ℓh, n_evals = find_feasible_point(obj_init, ℓh_guess, δ, log(eps(eltype(xtm1))))
+        ℓh, n_evals = find_feasible_point(obj, ℓh_guess, δ, log(eps(eltype(xtm1))))
         n_evals_total += n_evals
         ℓh
     else
         sampler.stepsizes[t - 1]
     end
-    ℓh, n_evals = minimize(obj_init, ℓh, c, r, ϵ)
+    ℓh, n_evals = minimize(obj, ℓh, c, r, ϵ)
     n_evals_total += n_evals
 
     h = exp(ℓh)

@@ -1,7 +1,11 @@
 
 struct SMCMALA{
-    Stepsizes<:AbstractVector,Precond<:AbstractMatrix,Adaptor<:AbstractAdaptor
+    Path<:AbstractPath,
+    Stepsizes<:AbstractVector,
+    Precond<:Union{<:AbstractMatrix,<:UniformScaling},
+    Adaptor<:AbstractAdaptor
 } <: AbstractSMC
+    path         :: Path
     stepsizes    :: Stepsizes
     precond      :: Precond
     adaptor      :: Adaptor
@@ -9,15 +13,30 @@ struct SMCMALA{
 end
 
 function SMCMALA(
-    stepsize::Real,
-    n_steps::Int,
-    precond::AbstractMatrix,
-    adaptor::Union{<:NoAdaptation,<:AcceptanceRateCtrl,<:ESJDMax},
+    path::AbstractPath,
+    adaptor::Union{<:AcceptanceRateControl,<:ESJDMax};
+    precond::Union{<:AbstractMatrix,<:UniformScaling}=I,
     n_mcmc_steps::Int=1,
 )
-    stepsizes = Fill(stepsize, n_steps)
-    return SMCMALA{typeof(stepsizes),typeof(precond),typeof(adaptor)}(
-        stepsizes, precond, adaptor, n_mcmc_steps
+    stepsizes = zeros(length(path))
+    return SMCMALA{typeof(path),typeof(stepsizes),typeof(precond),typeof(adaptor)}(
+        path, stepsizes, precond, adaptor, n_mcmc_steps
+    )
+end
+
+function SMCMALA(
+    path::AbstractPath,
+    stepsize::Union{Real,<:AbstractVector};
+    precond::Union{<:AbstractMatrix,<:UniformScaling}=I,
+    n_mcmc_steps::Int=1,
+)
+    if stepsize isa Real
+        stepsize = fill(stepsize, length(path))
+    end
+    @assert length(stepsize) == length(path)
+    @assert all(@. 0 < stepsize)
+    return SMCMALA{typeof(path),typeof(stepsizes),typeof(precond),Nothing}(
+        path, stepsizes, precond, nothing, n_mcmc_steps
     )
 end
 
@@ -29,8 +48,8 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
 
     μ_bwd = gradient_flow_euler(πt, x_prop, h, Γ)
 
-    ℓπt_prop = LogDensityProblems.logdensity(πt, x_prop)
-    ℓπt      = LogDensityProblems.logdensity(πt, x)
+    ℓπt_prop = logdensity_safe(πt, x_prop)
+    ℓπt      = logdensity_safe(πt, x)
 
     q_fwd  = BatchMvNormal(μ_fwd, 2 * h * Γ)
     q_bwd  = BatchMvNormal(μ_bwd, 2 * h * Γ)
@@ -52,16 +71,15 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
 end
 
 function potential(::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix)
-    ℓπt_xtm1   = LogDensityProblems.logdensity(πt, xtm1)
-    ℓπtm1_xtm1 = LogDensityProblems.logdensity(πtm1, xtm1)
-    return ℓπt_xtm1 - ℓπtm1_xtm1
+    return logdensity_safe(πt, xtm1) - logdensity_safe(πtm1, xtm1)
 end
 
 function mutate_with_potential(
     rng::Random.AbstractRNG, sampler::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix
 )
     (; stepsizes, precond, n_mcmc_steps) = sampler
-    ht, Γ = stepsizes[t], precond
+    ht = stepsizes[t]
+    Γ  = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
 
     xt = xtm1
     for _ in 1:n_mcmc_steps
@@ -70,6 +88,8 @@ function mutate_with_potential(
     ℓG = potential(sampler, t, πt, πtm1, xtm1)
     return xt, ℓG, NamedTuple()
 end
+
+using Plots
 
 function adapt_sampler(
     rng::Random.AbstractRNG,
@@ -80,7 +100,7 @@ function adapt_sampler(
     xtm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
-    if sampler.adaptor isa NoAdaptation
+    if isnothing(sampler.adaptor)
         return sampler, NamedTuple()
     end
 
@@ -90,81 +110,49 @@ function adapt_sampler(
     xtm1_sub    = xtm1[:, idx_sub]
     ℓwtm1_sub   = ℓwtm1[idx_sub]
 
-    Γ = sampler.precond
+    precond = sampler.precond
+    Γ       = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
 
-    if t == 2
-        function obj_init(ℓh′)
-            rng_fixed  = copy(rng)
-            xt_sub, ℓα = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-            esjd       = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, ℓα, esjd)
+    τ = sampler.adaptor.regularization
+
+    function obj(ℓh′)
+        rng_fixed  = copy(rng)
+        xt_sub, ℓα = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
+        esjd       = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
+        reg        = if t == 1
+            τ * abs2(ℓh′)
+        else
+            ℓh_prev = log(sampler.stepsizes[t - 1])
+            τ * abs2(ℓh′ - ℓh_prev)
         end
-
-        ℓh_lower_guess = -15.0
-
-        ## Find any point between 1e-10 and 2e-16 that is not degenerate
-        ℓh_decrease_stepsize = log(0.5)
-        ℓh_lower, n_feasible_evals = find_feasible_point(
-            obj_init, ℓh_lower_guess, ℓh_decrease_stepsize, log(eps(Float64))
-        )
-
-        ## Find an interval that contains a (possibly local) minima
-        ℓh_upper_increase_ratio = 1.2
-        n_interval_max_iters = ceil(Int, log(ℓh_upper_increase_ratio, 20))
-        ℓh_upper, _, n_interval_evals = find_golden_section_search_interval(
-            obj_init, ℓh_lower, ℓh_upper_increase_ratio, 1; n_max_iters=n_interval_max_iters
-        )
-        
-        ## Properly optimize objective
-        gss_abstol = 1e-2
-        ℓh, n_gss_iters = golden_section_search(
-            obj_init, ℓh_lower, ℓh_upper; abstol=gss_abstol
-        )
-        h = exp(ℓh)
-
-        _, ℓα = transition_mala(rng, h, Γ, πt, xtm1_sub)
-
-        stats = (
-            feasible_lowerbound_search_obj_evals = n_feasible_evals,
-            bracketing_interval_search_obj_evals = n_interval_evals,
-            golden_section_search_iters          = n_gss_iters,
-            acceptance_rate                      = exp(ℓα),
-            ula_stepsize                         = h,
-        )
-
-        # display(stats)
-        # ℓh_range = range(-8, 2; length=128)
-        # obj_range = map(obj_init, ℓh_range)
-        # Plots.plot(ℓh_range, obj_range) |> display
-        # Plots.vline!([ℓh]) |> display
-        # throw()
-
-        sampler = @set sampler.stepsizes[t] = exp(ℓh)
-        return sampler, stats
-    else
-        ℓh_prev            = log(sampler.stepsizes[t - 1])
-        ℓh_lower, ℓh_upper = ℓh_prev - 1, ℓh_prev + 1
-
-        function obj(ℓh′)
-            rng_fixed  = copy(rng)
-            xt_sub, ℓα = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-            esjd       = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓwtm1_sub, ℓα , esjd) +
-                   1.0 * abs2(ℓh′ - ℓh_prev)
-        end
-
-        gss_abstol = 1e-2
-        ℓh, n_gss_iters = golden_section_search(obj, ℓh_lower, ℓh_upper; abstol=gss_abstol)
-        h = exp(ℓh)
-
-        _, ℓα = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
-
-        sampler = @set sampler.stepsizes[t] = h
-        stats   = (
-            golden_section_search_iterations = n_gss_iters,
-            mala_stepsize                    = h,
-            acceptance_rate                  = exp(ℓα)
-        )
-        return sampler, stats
+        return adaptation_objective(sampler.adaptor, ℓα, esjd) + reg
     end
+
+    r = 1.5
+    c = 0.3
+    ϵ = 1e-2
+    δ = -1
+    ℓh_guess = -15.0
+    n_evals_total = 0
+
+    ℓh = if t == 1
+        ℓh, n_evals = find_feasible_point(obj, ℓh_guess, δ, log(eps(eltype(xtm1))))
+        n_evals_total += n_evals
+        ℓh
+    else
+        sampler.stepsizes[t - 1]
+    end
+    ℓh, n_evals = minimize(obj, ℓh, c, r, ϵ)
+    n_evals_total += n_evals
+
+    h     = exp(ℓh)
+    _, ℓα = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
+
+    stats = (mala_stepsize=h, acceptance_rate=exp(ℓα), n_objective_evals=n_evals_total)
+
+    # Consume rngs so that the actual mutation step is less biased.
+    rand(rng, size(xtm1))
+
+    sampler = @set sampler.stepsizes[t] = h
+    return sampler, stats
 end
