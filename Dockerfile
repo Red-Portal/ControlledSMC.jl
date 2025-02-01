@@ -33,4 +33,4 @@ RUN julia -e "cd(\"${USER_HOME_DIR}\"); using Pkg; Pkg.activate(\"scripts\"); in
 # configure the script entry point
 WORKDIR ${USER_HOME_DIR}
 
-ENTRYPOINT ["julia", "-e", "using Distributed, SysInfo; addprocs(min(SysInfo.ncores(), 32)); @everywhere using Pkg; @everywhere Pkg.activate(\"scripts\"); @everywhere include(\"scripts/experiments.jl\"); main(; show_progress=false)"]
+ENTRYPOINT ["julia", "-e", "using Distributed, SysInfo; addprocs(min(SysInfo.ncores(), 32)); @everywhere using Pkg; @everywhere Pkg.activate(\"scripts\"); @everywhere include(\"scripts/gridsearch.jl\"); main(; show_progress=false)"]
