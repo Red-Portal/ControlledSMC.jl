@@ -26,8 +26,9 @@
             "SMCULA + DetailedBalance",
             SMCULA(path, 0.5; backward=DetailedBalance(), precond=Eye(d)),
         ),
-        ("Adaptive SMCULA", SMCULA(path; adaptor=BackwardKLMin(; n_subsample=32))),
-        #("SMCUHMC", SMCUHMC(1.0, 0.5, n_iters, Eye(d))),
+        ("Adaptive SMCULA", SMCULA(path, BackwardKLMin(; n_subsample=32))),
+        ("SMCUHMC", SMCUHMC(path, 1.0, 0.5; mass_matrix=Eye(d))),
+        ("SMCUHMC", SMCUHMC(path, BackwardKLMin(; n_subsample=32); mass_matrix=Eye(d))),
         #("SMCKLMC", SMCKLMC(d, 5.0, 5.0, n_iters)),
     ]
         ControlledSMC.sample(sampler, n_particles, 0.5; show_progress=false)
@@ -64,8 +65,9 @@ end
             "SMCULA + DetailedBalance",
             SMCULA(path, 1e-4; backward=DetailedBalance(), precond=Eye(d)),
         ),
-        ("Adaptive SMCULA", SMCULA(path; adaptor=BackwardKLMin(; n_subsample=32))),
-        #("SMCUHMC", SMCUHMC(0.01, 0.5, n_iters, Eye(d))),
+        ("Adaptive SMCULA", SMCULA(path, BackwardKLMin(; n_subsample=32))),
+        ("SMCUHMC", SMCUHMC(path, 1.0, 0.5; mass_matrix=Eye(d))),
+        ("SMCUHMC", SMCUHMC(path, BackwardKLMin(; n_subsample=32); mass_matrix=Eye(d))),
         #("SMCKLMC", SMCKLMC(d, 0.0001, 1000.0, n_iters)),
     ]
         ControlledSMC.sample(sampler, n_particles, 0.5; show_progress=false)

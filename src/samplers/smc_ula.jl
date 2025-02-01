@@ -4,7 +4,7 @@ struct SMCULA{
     Stepsizes<:AbstractVector,
     Backward<:AbstractBackwardKernel,
     Precond<:Union{<:AbstractMatrix,<:UniformScaling},
-    Adaptor<:AbstractAdaptor,
+    Adaptor<:Union{Nothing,<:AbstractAdaptor},
 } <: AbstractSMC
     path      :: Path
     stepsizes :: Stepsizes
@@ -14,10 +14,9 @@ struct SMCULA{
 end
 
 function SMCULA(
-    path::AbstractPath;
+    path::AbstractPath, adaptor::AbstractAdaptor;
     precond::Union{<:AbstractMatrix,<:UniformScaling}=I,
     backward::AbstractBackwardKernel=TimeCorrectForwardKernel(),
-    adaptor::AbstractAdaptor,
 )
     stepsizes = zeros(Float64, length(path))
     return SMCULA{
@@ -37,11 +36,11 @@ function SMCULA(
         stepsize = fill(stepsize, length(path))
     end
     @assert length(stepsize) == length(path)
-    adaptor = NoAdaptation()
+    @assert all(@. 0 < stepsize )
     return SMCULA{
-        typeof(path),typeof(stepsize),typeof(backward),typeof(precond),typeof(adaptor)
+        typeof(path),typeof(stepsize),typeof(backward),typeof(precond),Nothing
     }(
-        path, stepsize, backward, precond, adaptor
+        path, stepsize, backward, precond, nothing
     )
 end
 
@@ -139,8 +138,6 @@ function potential_with_backward(
     end
 end
 
-using Plots
-
 function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCULA,
@@ -150,7 +147,7 @@ function adapt_sampler(
     xtm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
-    if sampler.adaptor isa NoAdaptation
+    if isnothing(sampler.adaptor)
         return sampler, NamedTuple()
     end
 

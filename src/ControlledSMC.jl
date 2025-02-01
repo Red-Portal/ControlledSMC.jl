@@ -71,8 +71,8 @@ export SMCULA
 # include("samplers/smc_barker.jl")
 # export SMCBarker
 
-# include("samplers/smc_uhmc.jl")
-# export SMCUHMC
+include("samplers/smc_uhmc.jl")
+export SMCUHMC
 
 # include("samplers/smc_klmc.jl")
 # export SMCKLMC

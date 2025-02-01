@@ -1,8 +1,6 @@
 
 abstract type AbstractAdaptor end
 
-struct NoAdaptation <: AbstractAdaptor end
-
 @kwdef struct BackwardKLMin{F<:Real} <: AbstractAdaptor
     n_subsample::Int
     regularization::F = 0.0

@@ -33,7 +33,8 @@ end
             SMCULA(path, 0.5; backward=TimeCorrectForwardKernel()),
         ),
         ("SMCULA + ForwardKernel", SMCULA(path, 0.5; backward=ForwardKernel())),
-        #("SMCUHMC", SMCUHMC(1.0, 0.5, n_iters, Eye(d))),
+        ("SMCUHMC", SMCUHMC(path, 1.0, 0.5; mass_matrix=Eye(d))),
+        ("SMCUHMC", SMCUHMC(path, BackwardKLMin(; n_subsample=32); mass_matrix=Eye(d))),
         #("SMCKLMC", SMCKLMC(d, 5.0, 10.0, n_iters)),
     ]
         pvalue = run_unbiasedness_test(sampler, n_particles, n_test_samples, Z_true)

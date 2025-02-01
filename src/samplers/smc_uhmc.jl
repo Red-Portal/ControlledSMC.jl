@@ -1,36 +1,65 @@
 
 struct SMCUHMC{
+    Path<:AbstractPath,
     Stepsizes<:AbstractVector,
-    Dampings<:AbstractVector,
-    Mass<:AbstractMatrix,
-    Adaptor<:AbstractAdaptor,
-    DampingGrid<:AbstractVector,
+    RefreshRates<:AbstractVector,
+    Mass<:Union{<:AbstractMatrix,<:UniformScaling},
+    Adaptor<:Union{<:AbstractAdaptor,Nothing},
+    RefreshRateGrid<:Union{<:AbstractVector,Nothing},
 } <: AbstractSMC
-    stepsizes    :: Stepsizes
-    dampings     :: Dampings
-    mass_matrix  :: Mass
-    adaptor      :: Adaptor
-    damping_grid :: DampingGrid
+    path              :: Path
+    stepsizes         :: Stepsizes
+    refresh_rates     :: RefreshRates
+    mass_matrix       :: Mass
+    adaptor           :: Adaptor
+    refresh_rate_grid :: RefreshRateGrid
 end
 
 function SMCUHMC(
-    stepsize::Real,
-    damping::Real,
-    n_steps::Int,
-    mass_matrix::AbstractMatrix,
+    path::AbstractPath,
     adaptor::AbstractAdaptor;
-    damping_grid::AbstractVector=[0.1, 0.9],
+    mass_matrix::Union{<:AbstractMatrix,<:UniformScaling}=I,
+    refresh_rate_grid::AbstractVector = [0.1, 0.9],
 )
-    stepsizes = Fill(stepsize, n_steps)
-    dampings  = Fill(damping, n_steps)
+    stepsizes     = zeros(Float64, length(path))
+    refresh_rates = zeros(Float64, length(path))
     return SMCUHMC{
+        typeof(path),
         typeof(stepsizes),
-        typeof(dampings),
+        typeof(refresh_rates),
         typeof(mass_matrix),
         typeof(adaptor),
-        typeof(damping_grid),
+        typeof(refresh_rate_grid),
     }(
-        stepsizes, dampings, mass_matrix, adaptor, damping_grid
+        path, stepsizes, refresh_rates, mass_matrix, adaptor, refresh_rate_grid
+    )
+end
+
+function SMCUHMC(
+    path::AbstractPath,
+    stepsize::Union{<:AbstractVector,<:Real},
+    refresh_rate::Union{<:AbstractVector,<:Real};
+    mass_matrix::Union{<:AbstractMatrix,<:UniformScaling}=I,
+)
+    if stepsize isa Real
+        stepsize = fill(stepsize, length(path))
+    end
+    if refresh_rate isa Real
+        refresh_rate = fill(refresh_rate, length(path))
+    end
+    @assert length(stepsize)    == length(path)
+    @assert length(refresh_rate) == length(path)
+    @assert all(@. 0 < stepsize )
+    @assert all(@. 0 < refresh_rate ≤ 1)
+    return SMCUHMC{
+        typeof(path),
+        typeof(stepsize),
+        typeof(refresh_rate),
+        typeof(mass_matrix),
+        Nothing,
+        Nothing,
+    }(
+        path, stepsize, refresh_rate, mass_matrix, nothing, nothing
     )
 end
 
@@ -50,15 +79,15 @@ end
 function mutate_with_potential(
     rng::Random.AbstractRNG, sampler::SMCUHMC, t::Int, πt, πtm1, ztm1::AbstractMatrix
 )
-    (; stepsizes, dampings, mass_matrix) = sampler
-    ϵ, α, M = stepsizes[t], dampings[t], mass_matrix
-    sqrt1mα = sqrt(1 - α)
+    (; stepsizes, refresh_rates, mass_matrix) = sampler
+    d    = size(ztm1, 1) ÷ 2
+    ϵ, ρ = stepsizes[t], refresh_rates[t]
+    M    = (mass_matrix isa UniformScaling) ? mass_matrix(d) : mass_matrix
 
-    d          = size(ztm1, 1) ÷ 2
-    xtm1, vtm1 = ztm1[1:d, :], ztm1[(d + 1):end, :]
+    xtm1, vtm1 = view(ztm1, 1:d, :), view(ztm1, (d + 1):2*d, :)
     v_dist     = MvNormal(Zeros(d), M)
 
-    vthalf = sqrt1mα * vtm1 + sqrt(α) * unwhiten(M, randn(rng, size(vtm1)))
+    vthalf = sqrt(1 - ρ^2) * vtm1 + ρ * unwhiten(M, randn(rng, size(vtm1)))
     xt, vt = leapfrog(πt, xtm1, vthalf, ϵ, M)
 
     ℓπt     = logdensity_safe(πt, xt)
@@ -66,8 +95,8 @@ function mutate_with_potential(
     ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 
-    L  = BatchMvNormal(sqrt1mα * vthalf, α * M)
-    K  = BatchMvNormal(sqrt1mα * vtm1, α * M)
+    L  = BatchMvNormal(sqrt(1 - ρ^2) * vthalf, ρ^2 * M)
+    K  = BatchMvNormal(sqrt(1 - ρ^2) * vtm1,   ρ^2 * M)
     ℓl = logpdf(L, vtm1)
     ℓk = logpdf(K, vthalf)
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
@@ -125,10 +154,10 @@ function adapt_sampler(
     t::Int,
     πt,
     πtm1,
-    xtm1::AbstractMatrix,
+    ztm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
-    if sampler.adaptor isa NoAdaptation
+    if isnothing(sampler.adaptor)
         return sampler, NamedTuple()
     end
 
@@ -136,80 +165,77 @@ function adapt_sampler(
     w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
     n_sub     = sampler.adaptor.n_subsample
     sub_idx   = systematic_sampling(rng, w_norm, n_sub)
-    xtm1_sub  = xtm1[:, sub_idx]
+    ztm1_sub  = ztm1[:, sub_idx]
     ℓdPdQ_sub = ℓwtm1[sub_idx]
     ℓwtm1_sub = fill(-log(n_sub), n_sub)
 
-    ρ_grid = sampler.damping_grid
+    ρ_grid = sampler.refresh_rate_grid
 
-    if t == 2
-        function obj_init(params)
-            rng_fixed = copy(rng)
-            sampler′ = @set sampler.stepsizes[t] = exp(params[1])
-            sampler′ = @set sampler′.dampings[t] = params[2]
-            _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) +
-                sampler.adaptor.regularization * abs2(params[1])
+    function obj(ℓh_, ρ_)
+        rng_fixed   = copy(rng)
+        sampler′     = @set sampler.stepsizes[t]     = exp(ℓh_)
+        sampler′     = @set sampler′.refresh_rates[t] = ρ_
+        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, ztm1_sub)
+        τ            = sampler.adaptor.regularization
+        reg          = if t == 1
+            τ * abs2(ℓh_)
+        else
+            ℓh_prev = log(sampler.stepsizes[t - 1])
+            τ * abs2(ℓh_prev - ℓh_)
         end
-
-        ℓh_lower_guess = -7.5
-        ρ_guess        = 0.01
-
-        obj_init_ℓh = ℓh′ -> obj_init([ℓh′, ρ_guess])
-
-        ## Find any point that is not degenerate
-        ℓh_decrease_stepsize = 1
-        ℓh_lower, n_feasible_evals = find_feasible_point(
-            obj_init_ℓh,
-            ℓh_lower_guess,
-            ℓh_decrease_stepsize,
-            log(eps(Float64)),
-        )
-
-        ρ, ℓh, stats = coordinate_descent_uhmc(obj_init, ρ_guess, ℓh_lower, ρ_grid)
-
-        # Consume rngs so that the actual mutation is less biased.
-        rand(rng, size(xtm1))
-
-        h     = exp(ℓh)
-        stats = (
-            feasible_search_objective_evaluations    = n_feasible_evals,
-            coordinate_descent_iterations            = stats.n_iters,
-            coordinate_descent_objective_evaluations = stats.n_obj_evals,
-            uhmc_stepsize                            = h,
-            uhmc_damping                             = ρ,
-        )
-
-        sampler = @set sampler.stepsizes[2] = h
-        sampler = @set sampler.dampings[2] = ρ
-        return sampler, stats
-    else
-        ℓh_prev = log(sampler.stepsizes[t - 1])
-        ρ_prev  = sampler.dampings[t - 1]
-
-        function obj(params)
-            rng_fixed = copy(rng)
-            sampler′ = @set sampler.stepsizes[t] = exp(params[1])
-            sampler′ = @set sampler′.dampings[t] = params[2]
-            _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
-            return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) +
-                   sampler.adaptor.regularization * abs2(ℓh_prev - params[1])
-        end
-
-        ρ, ℓh, stats = coordinate_descent_uhmc(obj, ρ_prev, ℓh_prev, ρ_grid)
-
-        # Consume rngs so that the actual mutation is less biased.
-        rand(rng, size(xtm1))
-
-        h       = exp(ℓh)
-        sampler = @set sampler.stepsizes[t] = h
-        sampler = @set sampler.dampings[t] = ρ
-        stats   = (
-            coordinate_descent_iterations            = stats.n_iters,
-            coordinate_descent_objective_evaluations = stats.n_obj_evals,
-            uhmc_stepsize                            = h,
-            uhmc_damping                             = ρ,
-        )
-        return sampler, stats
+        return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) + reg
     end
+
+    r = 2.0
+    c = 0.01
+    ϵ = 1e-2
+    δ = -1
+    ℓh_guess = -7.5
+    ρ_guess  = 0.1
+    n_evals_total = 0
+
+    ℓh = if t == 1
+        ℓh, n_evals = find_feasible_point(
+            ℓh_ -> obj(ℓh_, ρ_guess), ℓh_guess, δ, log(eps(eltype(ztm1)))
+        )
+        n_evals_total += n_evals
+    else
+        sampler.stepsizes[t - 1]
+    end
+    ρ = ρ_guess
+
+    n_max_iters = 10
+    i           = 0
+    while true
+        ℓh′, n_evals   = minimize(ℓh_ -> obj(ℓh_, ρ), ℓh, c, r, ϵ)
+        n_evals_total += n_evals
+
+        ρ′             = argmin(ρ_ -> obj(ℓh′, ρ_), ρ_grid)
+        n_evals_total += length(ρ_grid)
+
+        if max(abs(ℓh′ - ℓh), abs(ρ′ - ρ)) < ϵ || i == n_max_iters
+            ρ  = ρ′
+            ℓh = ℓh′
+            break
+        end
+
+        i += 1
+        ρ  = ρ′
+        ℓh = ℓh′
+    end
+        
+    # Consume rngs so that the actual mutation is less biased.
+    rand(rng, size(ztm1))
+
+    h     = exp(ℓh)
+    stats = (
+        coordinate_descent_iterations = i,
+        n_objective_evals             = n_evals_total,
+        uhmc_stepsize                 = h,
+        uhmc_refresh_rate             = ρ,
+    )
+
+    sampler = @set sampler.stepsizes[t]     = h
+    sampler = @set sampler.refresh_rates[t] = ρ
+    return sampler, stats
 end
