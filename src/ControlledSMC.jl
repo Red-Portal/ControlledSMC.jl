@@ -40,13 +40,8 @@ include("logdensity.jl")
 include("adaptation.jl")
 export
     NoAdaptation,
-    CondESSMax,
-    ForwardKLMin,
     BackwardKLMin,
-    ChiSquareMin,
-    AnnealedFlowTransport,
-    AcceptanceRateCtrl,
-    ESJDMax
+    AcceptanceRateControl
 
 # Target Paths
 include("paths/annealing.jl")
@@ -67,20 +62,20 @@ export sample
 include("samplers/smc_ula.jl")
 export SMCULA
 
-include("samplers/smc_mala.jl")
-export SMCMALA
+#include("samplers/smc_mala.jl")
+#export SMCMALA
 
-include("samplers/smc_ubarker.jl")
-export SMCUBarker
+# include("samplers/smc_ubarker.jl")
+# export SMCUBarker
 
-include("samplers/smc_barker.jl")
-export SMCBarker
+# include("samplers/smc_barker.jl")
+# export SMCBarker
 
-include("samplers/smc_uhmc.jl")
-export SMCUHMC
+# include("samplers/smc_uhmc.jl")
+# export SMCUHMC
 
-include("samplers/smc_klmc.jl")
-export SMCKLMC
+# include("samplers/smc_klmc.jl")
+# export SMCKLMC
 
 # Optimized Annlealed SMC
 include("paths/update_schedule.jl")
@@ -95,7 +90,7 @@ export optimize_policy
 include("samplers/csmc_ula.jl")
 export CSMCULA
 
-include("samplers/csmc_klmc.jl")
-export CSMCKLMC
+#include("samplers/csmc_klmc.jl")
+#export CSMCKLMC
 
 end

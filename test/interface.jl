@@ -16,14 +16,21 @@
     @testset "$(name)" for (name, sampler) in [
         (
             "SMCULA + TimeCorrectForwardKernel",
-            SMCULA(0.5, n_iters, TimeCorrectForwardKernel(), Eye(d)),
+            SMCULA(path, 0.5; backward=TimeCorrectForwardKernel(), precond=Eye(d)),
         ),
-        ("SMCULA + ForwardKernel", SMCULA(0.5, n_iters, ForwardKernel(), Eye(d))),
-        ("SMCULA + DetailedBalance", SMCULA(0.5, n_iters, DetailedBalance(), Eye(d))),
-        ("SMCUHMC", SMCUHMC(1.0, 0.5, n_iters, Eye(d))),
-        ("SMCKLMC", SMCKLMC(d, 5.0, 5.0, n_iters)),
+        (
+            "SMCULA + ForwardKernel",
+            SMCULA(path, 0.5; backward=ForwardKernel(), precond=Eye(d)),
+        ),
+        (
+            "SMCULA + DetailedBalance",
+            SMCULA(path, 0.5; backward=DetailedBalance(), precond=Eye(d)),
+        ),
+        ("Adaptive SMCULA", SMCULA(path; adaptor=BackwardKLMin(; n_subsample=32))),
+        #("SMCUHMC", SMCUHMC(1.0, 0.5, n_iters, Eye(d))),
+        #("SMCKLMC", SMCKLMC(d, 5.0, 5.0, n_iters)),
     ]
-        ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
+        ControlledSMC.sample(sampler, n_particles, 0.5; show_progress=false)
     end
 end
 
@@ -34,7 +41,7 @@ end
     end
     pdb  = PosteriorDB.database()
     post = PosteriorDB.posterior(pdb, "dogs-dogs")
-    prob = StanProblem(post, ".stan/"; force=true)
+    prob = StanProblem(post, ".stan/"; force=true, nan_on_error=true)
     d    = LogDensityProblems.dimension(prob)
 
     # Sampler Setup
@@ -47,13 +54,20 @@ end
     @testset "$(name)" for (name, sampler) in [
         (
             "SMCULA + TimeCorrectForwardKernel",
-            SMCULA(1e-4, n_iters, TimeCorrectForwardKernel(), Eye(d)),
+            SMCULA(path, 1e-4; backward=TimeCorrectForwardKernel(), precond=Eye(d)),
         ),
-        ("SMCULA + ForwardKernel", SMCULA(1e-4, n_iters, ForwardKernel(), Eye(d))),
-        ("SMCULA + DetailedBalance", SMCULA(1e-4, n_iters, DetailedBalance(), Eye(d))),
-        ("SMCUHMC", SMCUHMC(0.01, 0.5, n_iters, Eye(d))),
-        ("SMCKLMC", SMCKLMC(d, 0.0001, 1000.0, n_iters)),
+        (
+            "SMCULA + ForwardKernel",
+            SMCULA(path, 1e-4; backward=ForwardKernel(), precond=Eye(d)),
+        ),
+        (
+            "SMCULA + DetailedBalance",
+            SMCULA(path, 1e-4; backward=DetailedBalance(), precond=Eye(d)),
+        ),
+        ("Adaptive SMCULA", SMCULA(path; adaptor=BackwardKLMin(; n_subsample=32))),
+        #("SMCUHMC", SMCUHMC(0.01, 0.5, n_iters, Eye(d))),
+        #("SMCKLMC", SMCKLMC(d, 0.0001, 1000.0, n_iters)),
     ]
-        ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
+        ControlledSMC.sample(sampler, n_particles, 0.5; show_progress=false)
     end
 end

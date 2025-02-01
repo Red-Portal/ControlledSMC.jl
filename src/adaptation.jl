@@ -3,17 +3,7 @@ abstract type AbstractAdaptor end
 
 struct NoAdaptation <: AbstractAdaptor end
 
-@kwdef struct ForwardKLMin{F<:Real} <: AbstractAdaptor
-    n_subsample::Int
-    regularization::F = 0.0
-end
-
 @kwdef struct BackwardKLMin{F<:Real} <: AbstractAdaptor
-    n_subsample::Int
-    regularization::F = 0.0
-end
-
-@kwdef struct AnnealedFlowTransport{F<:Real} <: AbstractAdaptor
     n_subsample::Int
     regularization::F = 0.0
 end
@@ -23,47 +13,14 @@ end
     regularization::F = 0.0
 end
 
-@kwdef struct ChiSquareMin{F<:Real} <: AbstractAdaptor
-    n_subsample::Int
-    regularization::F = 0.0
-end
-
-@kwdef struct AcceptanceRateCtrl{Acc<:Real,F<:Real} <: AbstractAdaptor
+@kwdef struct AcceptanceRateControl{Acc<:Real,F<:Real} <: AbstractAdaptor
     n_subsample::Int
     target_acceptance_rate::Acc
     regularization::F = 0.0
 end
 
-@kwdef struct CondESSMax{F<:Real} <: AbstractAdaptor
-    n_subsample::Int
-    regularization::F = 0.0
-end
-
-adaptation_objective(::NoAdaptation, ::AbstractVector, ::AbstractVector) = 0.0
-
 function adaptation_objective(
-    ::ForwardKLMin, ℓw::AbstractVector, ℓdPdQ::AbstractVector, ℓG::AbstractVector, args...
-)
-    ℓ∑w       = logsumexp(ℓw)
-    ℓw_norm   = @. ℓw - ℓ∑w
-    w_norm    = exp.(ℓw_norm)
-    ∑ℓdPdQ    = logsumexp(ℓdPdQ)
-    dPdQ_norm = @. exp(ℓdPdQ - ∑ℓdPdQ)
-    return dot(w_norm .* dPdQ_norm, xexpx.(ℓG))
-end
-
-function adaptation_objective(
-    ::BackwardKLMin, ℓw::AbstractVector, ℓdPdQ::AbstractVector, ℓG::AbstractVector, args...
-)
-    ∑ℓw       = logsumexp(ℓw)
-    w_norm    = @. exp(ℓw - ∑ℓw)
-    ∑ℓdPdQ    = logsumexp(ℓdPdQ)
-    dPdQ_norm = @. exp(ℓdPdQ - ∑ℓdPdQ)
-    return dot(w_norm .* dPdQ_norm, -ℓG)
-end
-
-function adaptation_objective(
-    ::AnnealedFlowTransport,
+    ::BackwardKLMin,
     ℓw::AbstractVector,
     ℓdPdQ::AbstractVector,
     ℓG::AbstractVector,
@@ -75,27 +32,7 @@ function adaptation_objective(
 end
 
 function adaptation_objective(
-    ::ChiSquareMin, ℓw::AbstractVector, ℓdPdQ::AbstractVector, ℓG::AbstractVector, args...
-)
-    ℓ∑w        = logsumexp(ℓw)
-    ℓw_norm    = ℓw .- ℓ∑w
-    ∑ℓdPdQ     = logsumexp(ℓdPdQ)
-    ℓdPdQ_norm = ℓdPdQ .- ∑ℓdPdQ
-    return logsumexp(ℓw_norm + ℓdPdQ_norm + 2 * logsubexp(ℓG, 0))
-end
-
-function adaptation_objective(
-    ::CondESSMax, ℓw::AbstractVector, ::AbstractVector, ℓG::AbstractVector, args...
-)
-    N         = length(ℓw)
-    ℓ∑WG      = logsumexp(ℓw + ℓG)
-    ℓEWG2     = logsumexp(ℓw + 2 * ℓG) - log(N)
-    ℓcond_ess = 2 * ℓ∑WG - ℓEWG2
-    return -ℓcond_ess
-end
-
-function adaptation_objective(
-    adaptor::AcceptanceRateCtrl,
+    adaptor::AcceptanceRateControl,
     ::AbstractVector,
     ::AbstractVector,
     ::AbstractVector,
@@ -111,7 +48,7 @@ function adaptation_objective(
     return -esjd
 end
 
-function find_feasible_point(f, x0::Real, stepsize::Real, lb::Real)
+function find_feasible_point(f, x0::Real, δ::Real, lb::Real)
     @assert x0 > lb
 
     x      = x0
@@ -121,7 +58,7 @@ function find_feasible_point(f, x0::Real, stepsize::Real, lb::Real)
         if isfinite(y)
             return x, n_eval
         else
-            x -= stepsize
+            x += δ
             y = f(x)
             n_eval += 1
         end
@@ -135,7 +72,7 @@ end
 
 function golden_section_search(f, a::Real, b::Real; abstol::Real=1e-2)
     ϕinv    = (√5 - 1) / 2
-    n_iters = 0
+    n_evals = 2
     while true
         c = b - (b - a) * ϕinv
         d = a + (b - a) * ϕinv
@@ -158,30 +95,56 @@ function golden_section_search(f, a::Real, b::Real; abstol::Real=1e-2)
             )
         end
 
-        n_iters += 1
+        n_evals += 2
     end
-    return (b + a) / 2, n_iters
+    return (b + a) / 2, n_evals
 end
 
-function find_golden_section_search_interval(f, a::Real, δ::Real, r::Real)
+function bracket_minimum(f, a::Real, c::Real, r::Real)
     @assert r > 1
 
     b  = a
     y0 = f(a)
     y  = y0
     k  = 0
+    n_evals = 2
     while y0 ≥ y
-        b = a + δ * r^k
+        b = a + c * r^k
         y′ = f(b)
-
         if !isfinite(y′)
-            @warn "Degenerate objective value f(x) = $y′ for x = $b encountered during golden section search initial interval search."
-            return a + δ * r^(k - 1), k
+            return a + c * r^(k - 1), n_evals
         elseif y < y′
             break
         end
-        y = y′
-        k += 1
+        y        = y′
+        k       += 1
+        n_evals += 1
     end
-    return a + δ * r^k, k
+    return a + c * r^k, n_evals
+end
+
+function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
+    n_eval_total = 0 
+    x_plus, n_eval  = bracket_minimum(f, x0, c, r)   
+    n_eval_total   += n_eval
+
+    x_minus, n_eval = bracket_minimum(f, x_plus, -c, r)   
+    n_eval_total   += n_eval
+
+    x_opt, n_eval = golden_section_search(f, x_minus, x_plus; abstol=ϵ)
+    n_eval_total += n_eval
+
+    # x_viz = range(-15, 2; length=32)
+    # y_viz = @showprogress map(f, x_viz)
+    # Plots.plot(x_viz, y_viz; yscale=:log10) |> display
+    # Plots.vline!([x0], label="x0") |> display
+    # Plots.vline!([x_minus], label="x_minus") |> display
+    # Plots.vline!([x_plus], label="x_plus") |> display
+    # Plots.vline!([x_opt], label="x_opt") |> display
+
+    # if readline() == "n"
+    #     throw()
+    # end
+
+    x_opt, n_eval_total
 end

@@ -15,7 +15,7 @@ function log_potential_moments(ℓw::AbstractVector, ℓG::AbstractVector)
 end
 
 function adapt_sampler(
-    ::AbstractRNG, sampler, ::Int, ::Any, ::Any, ::AbstractMatrix, ::AbstractVector
+    ::Random.AbstractRNG, sampler, ::Int, ::Any, ::Any, ::AbstractMatrix, ::AbstractVector
 )
     return sampler
 end
@@ -23,16 +23,17 @@ end
 function sample(
     rng::Random.AbstractRNG,
     sampler::AbstractSMC,
-    path::AbstractPath,
     n_particles::Int,
-    threshold::Real;
+    resample_threshold::Real;
     show_progress::Bool=true,
+    save_particle_history::Bool=false,
 )
-    @assert 0 ≤ threshold ≤ 1
+    @assert 0 ≤ resample_threshold ≤ 1
 
+    path    = sampler.path
     n_iters = length(path)
     states  = NamedTuple[]
-    stats   = NamedTuple[]
+    infos   = NamedTuple[]
     prog    = ProgressMeter.Progress(n_iters; showspeed=true, enabled=show_progress)
 
     x, ℓG = rand_initial_with_potential(rng, sampler, path, n_particles)
@@ -40,7 +41,7 @@ function sample(
     ℓw    = ℓG
 
     ℓw_norm, ess         = normalize_weights(ℓw)
-    ancestors, resampled = resample(rng, ℓw_norm, ess, threshold)
+    ancestors, resampled = resample(rng, ℓw_norm, ess, resample_threshold)
 
     if resampled
         ℓZ = update_log_normalizer(ℓZ, ℓw)
@@ -50,25 +51,30 @@ function sample(
     end
 
     state = (particles=x, ancestors=ancestors, log_potential=ℓG)
-    stat  = (iteration=1, ess=n_particles, log_normalizer=ℓZ, resampled=resampled)
-    push!(states, state)
-    push!(stats, stat)
-    pm_next!(prog, last(stats))
+    info  = (iteration=0, ess=n_particles, log_normalizer=ℓZ, resampled=resampled)
 
-    target_prev = get_target(path, 1)
-    for t in 2:n_iters
+    if save_particle_history
+        state = merge(state, (particles=x,))
+    end
+
+    push!(states, state)
+    push!(infos,  info)
+    pm_next!(prog, info)
+
+    target_prev = get_target(path, 0)
+    for t in 1:n_iters
         target        = get_target(path, t)
-        sampler, stat = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
+        sampler, info = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
         x, ℓG, aux    = mutate_with_potential(rng, sampler, t, target, target_prev, x)
 
         ℓG = @. ifelse(isfinite(ℓG), ℓG, -Inf)
 
-        stat′ = log_potential_moments(ℓw, ℓG)
-        stat = merge(stat′, stat)
+        info′ = log_potential_moments(ℓw, ℓG)
+        info = merge(info′, info)
 
         ℓw                   = ℓw + ℓG
         ℓw_norm, ess         = normalize_weights(ℓw)
-        ancestors, resampled = resample(rng, ℓw_norm, ess, threshold)
+        ancestors, resampled = resample(rng, ℓw_norm, ess, resample_threshold)
 
         if !isfinite(ess)
             throw(ErrorException("The ESS is NaN. Something is broken. Most likely all particles degenerated."))
@@ -86,23 +92,25 @@ function sample(
 
         target_prev = target
         state = merge((particles=x, log_potential=ℓG), aux)
-        stat = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), stat)
+        info  = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), info)
+
+        if save_particle_history
+            state = merge(state, (particles=x,))
+        end
+
         push!(states, state)
-        push!(stats, stat)
-        pm_next!(prog, last(stats))
+        push!(infos, info)
+        pm_next!(prog, info)
     end
     ℓw_norm, _ = normalize_weights(ℓw)
-    return x, ℓw_norm, sampler, states, stats
+    return x, ℓw_norm, sampler, states, infos
 end
 
 function sample(
     sampler::AbstractSMC,
-    path::AbstractPath,
     n_particles::Int,
-    threshold::Real;
-    show_progress::Bool=true,
+    resample_threshold::Real;
+    kwargs...
 )
-    return sample(
-        Random.default_rng(), sampler, path, n_particles, threshold; show_progress
-    )
+    return sample(Random.default_rng(), sampler, n_particles, resample_threshold; kwargs...)
 end
