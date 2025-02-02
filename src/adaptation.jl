@@ -18,11 +18,7 @@ end
 end
 
 function adaptation_objective(
-    ::BackwardKLMin,
-    ℓw::AbstractVector,
-    ℓdPdQ::AbstractVector,
-    ℓG::AbstractVector,
-    args...,
+    ::BackwardKLMin, ℓw::AbstractVector, ℓdPdQ::AbstractVector, ℓG::AbstractVector, args...
 )
     ∑ℓw    = logsumexp(ℓw)
     w_norm = @. exp(ℓw - ∑ℓw)
@@ -30,7 +26,7 @@ function adaptation_objective(
 end
 
 function adaptation_objective(
-    adaptor::AcceptanceRateControl, log_acceptance_rate::Real, ::Real,
+    adaptor::AcceptanceRateControl, log_acceptance_rate::Real, ::Real
 )
     return (log_acceptance_rate - log(adaptor.target_acceptance_rate))^2
 end
@@ -61,19 +57,21 @@ function find_feasible_point(f, x0::Real, δ::Real, lb::Real)
     )
 end
 
-function golden_section_search(f, a::Real, b::Real, x::Real; abstol::Real=1e-2)
+function golden_section_search(f, a::Real, b::Real, c::Real; abstol::Real=1e-2)
+    @assert a < b && b < c
+
     ϕinv    = (√5 - 1) / 2
     ϕinvc   = 1 - ϕinv
     n_evals = 0
 
-    x0, x1, x2, x3 = a, 0, 0, b
+    x0, x1, x2, x3 = a, 0, 0, c
 
-    if abs(b - x) > abs(x - a)
-        x1 = x
-        x2 = x + ϕinvc*(b - x)
+    if abs(c - b) > abs(b - a)
+        x1 = b
+        x2 = b + ϕinvc * (c - b)
     else
-        x2 = x
-        x1 = x - ϕinvc*(x - a)
+        x2 = b
+        x1 = b - ϕinvc * (b - a)
     end
 
     while abs(x1 - x2) ≥ abstol
@@ -84,19 +82,21 @@ function golden_section_search(f, a::Real, b::Real, x::Real; abstol::Real=1e-2)
         if f2 < f1 || !isfinite(f1)
             x0 = x1
             x1 = x2
-            x2 = ϕinv*x2 + ϕinvc*x3
+            x2 = ϕinv * x2 + ϕinvc * x3
             f1 = f2
             f2 = f(x2)
-        elseif isfinite(f2)
+        elseif (f2 ≥ f1 || !isfinite(f2)) && isfinite(f1)
             x3 = x2
             x2 = x1
-            x1 = ϕinv*x1 + ϕinvc*x0
+            x1 = ϕinv * x1 + ϕinvc * x0
             f2 = f1
             f1 = f(x1)
         else
             throw(
                 ErrorException(
-                    "Golden section search failed at a = $a, b = $b, c = $c, d = $d, with f(c) = $fc, f(d) = $fd",
+                    "Golden section search failed at " *
+                    "x0 = $x0, x1 = $x1, x2 = $x2, x3 = $x3" *
+                    " with f(x1) = $f1, f(x2) = $f2",
                 ),
             )
         end
@@ -104,49 +104,77 @@ function golden_section_search(f, a::Real, b::Real, x::Real; abstol::Real=1e-2)
     return (x1 + x2) / 2, n_evals
 end
 
-function bracket_minimum(f, a::Real, c::Real, r::Real; n_max_iters::Int=100)
+function bracket_minimum(f, x0::Real, c::Real, r::Real; n_max_iters::Int=100)
+    @assert c > 0
     @assert r > 1
 
-    y = f(a)
-    for k in 1:n_max_iters
-        b = a + c * r^k
-        y′ = f(b)
-        if !isfinite(y′) || y < y′
-            return b, a + c * r^(k - 1), k
+    x_plus  = x0
+    x_minus = x0
+
+    y       = f(x0)
+    y0      = y
+    n_evals = 1
+    k       = 0
+    if isfinite(y)
+        while true
+            x_plus = x0 + c * r^k
+            y′ = f(x_plus)
+            n_evals += 1
+            if !isfinite(y′) || y < y′ || y0 < y′
+                break
+            end
+            if k == n_max_iters
+                throw(
+                    ErrorException(
+                        "Bracket minimum first stage didn't terminate within $(n_max_iters) iterations, " *
+                        "where x0 = $(x0), x+ = $(x_plus), y = $(y), y′ = $(y′)",
+                    ),
+                )
+            end
+            y = y′
+            k += 1
         end
-        y      = y′
     end
-    throw(
-        ErrorException(
-            "Bracket minimum didn't terminate within $(n_max_iters) iterations, where f(b) = $(y)",
-        )
-    )
+
+    k = 1
+    y = f(x_plus - c)
+    while true
+        x_minus = x_plus - c * r^k
+        y′ = f(x_minus)
+        n_evals += 1
+        if isfinite(y′) && isfinite(y) && y < y′
+            break
+        end
+        if k == n_max_iters
+            throw(
+                ErrorException(
+                    "Bracket minimum second stage didn't terminate within $(n_max_iters) iterations, " *
+                    "where x+ = $(x_plus), x- = $(x_minus), y = $(y), y′ = $(y′)",
+                ),
+            )
+        end
+        y = y′
+        k += 1
+    end
+    x_int = x_plus - c * r^(k - 1)
+    return x_plus, x_minus, x_int, n_evals
 end
 
 function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
-    n_eval_total = 0 
+    x_plus, x_minus, x_int, n_brac_eval = bracket_minimum(f, x0, c, r)
+    x_opt, n_gold_eval = golden_section_search(f, x_minus, x_int, x_plus; abstol=ϵ)
 
-    x_plus, _, n_eval  = bracket_minimum(f, x0, c, r)   
-    n_eval_total      += n_eval
-
-    x_minus, x_int, n_eval = bracket_minimum(f, x_plus, -c, r)   
-    n_eval_total          += n_eval
-
-    x_opt, n_eval = golden_section_search(f, x_minus, x_plus, x_int; abstol=ϵ)
-    n_eval_total += n_eval
-
-    # x_viz = range(-15, 2; length=32)
+    # x_viz = range(-15, 5; length=64)
     # y_viz = @showprogress map(f, x_viz)
-    # Plots.plot(x_viz, y_viz; yscale=:log10) |> display
-    # Plots.vline!([x0], label="x0") |> display
+    # Plots.plot(x_viz, y_viz; ylims=[-Inf, 1e+3]) |> display
+    # Plots.vline!([x0],      label="x0")      |> display
     # Plots.vline!([x_minus], label="x_minus") |> display
-    # Plots.vline!([x_plus], label="x_plus") |> display
-    # Plots.vline!([x_opt], label="x_opt") |> display
-    # Plots.vline!([x_int], label="x_int") |> display
-
+    # Plots.vline!([x_plus],  label="x_plus")  |> display
+    # Plots.vline!([x_opt],   label="x_opt")   |> display
+    # Plots.vline!([x_int],   label="x_int")   |> display
     # if readline() == "n"
-    #     throw()
+    #    throw()
     # end
 
-    x_opt, n_eval_total
+    return x_opt, n_brac_eval + n_gold_eval
 end
