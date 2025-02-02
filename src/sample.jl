@@ -34,7 +34,7 @@ function sample(
     n_iters = length(path)
     states  = NamedTuple[]
     infos   = NamedTuple[]
-    prog    = ProgressMeter.Progress(n_iters; showspeed=true, enabled=show_progress)
+    prog    = ProgressMeter.Progress(n_iters + 1; showspeed=true, enabled=show_progress)
 
     x, ℓG = rand_initial_with_potential(rng, sampler, path, n_particles)
     ℓZ    = zero(eltype(x))
@@ -58,7 +58,7 @@ function sample(
     end
 
     push!(states, state)
-    push!(infos,  info)
+    push!(infos, info)
     pm_next!(prog, info)
 
     target_prev = get_target(path, 0)
@@ -77,7 +77,11 @@ function sample(
         ancestors, resampled = resample(rng, ℓw_norm, ess, resample_threshold)
 
         if !isfinite(ess)
-            throw(ErrorException("The ESS is NaN. Something is broken. Most likely all particles degenerated."))
+            throw(
+                ErrorException(
+                    "The ESS is NaN. Something is broken. Most likely all particles degenerated.",
+                ),
+            )
         end
 
         if resampled || t == n_iters
@@ -92,7 +96,7 @@ function sample(
 
         target_prev = target
         state = merge((particles=x, log_potential=ℓG), aux)
-        info  = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), info)
+        info = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), info)
 
         if save_particle_history
             state = merge(state, (particles=x,))
@@ -106,11 +110,6 @@ function sample(
     return x, ℓw_norm, sampler, states, infos
 end
 
-function sample(
-    sampler::AbstractSMC,
-    n_particles::Int,
-    resample_threshold::Real;
-    kwargs...
-)
+function sample(sampler::AbstractSMC, n_particles::Int, resample_threshold::Real; kwargs...)
     return sample(Random.default_rng(), sampler, n_particles, resample_threshold; kwargs...)
 end
