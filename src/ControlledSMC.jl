@@ -38,11 +38,7 @@ include("batchmvnormal.jl")
 include("logdensity.jl")
 
 include("adaptation.jl")
-export
-    NoAdaptation,
-    BackwardKLMin,
-    AcceptanceRateControl,
-    ESJDMax
+export NoAdaptation, BackwardKLMin, AcceptanceRateControl, ESJDMax
 
 # Target Paths
 include("paths/annealing.jl")

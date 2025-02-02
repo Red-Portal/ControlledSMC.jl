@@ -14,7 +14,8 @@ struct SMCULA{
 end
 
 function SMCULA(
-    path::AbstractPath, adaptor::AbstractAdaptor;
+    path::AbstractPath,
+    adaptor::AbstractAdaptor;
     precond::Union{<:AbstractMatrix,<:UniformScaling}=I,
     backward::AbstractBackwardKernel=TimeCorrectForwardKernel(),
 )
@@ -36,10 +37,8 @@ function SMCULA(
         stepsize = fill(stepsize, length(path))
     end
     @assert length(stepsize) == length(path)
-    @assert all(@. 0 < stepsize )
-    return SMCULA{
-        typeof(path),typeof(stepsize),typeof(backward),typeof(precond),Nothing
-    }(
+    @assert all(@. 0 < stepsize)
+    return SMCULA{typeof(path),typeof(stepsize),typeof(backward),typeof(precond),Nothing}(
         path, stepsize, backward, precond, nothing
     )
 end
@@ -122,12 +121,13 @@ function potential_with_backward(
 )
     (; stepsizes, precond) = sampler
 
-    ht, Γ  = stepsizes[t], precond
+    ht     = stepsizes[t]
+    Γ      = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
     ℓπt_xt = logdensity_safe(πt, xt)
     K      = BatchMvNormal(q_fwd, 2 * ht * Γ)
     ℓk     = logpdf(K, xt)
 
-    if t == 2
+    if t == 1
         return ℓπt_xt - ℓk
     else
         ℓπtm1_xtm1 = logdensity_safe(πtm1, xtm1)
@@ -177,14 +177,14 @@ function adapt_sampler(
     r = 1.5
     c = 0.3
     ϵ = 1e-2
-    δ = -1
+    δ = -2 * r
     ℓh_guess = -15.0
     n_evals_total = 0
 
     ℓh = if t == 1
         ℓh, n_evals = find_feasible_point(obj, ℓh_guess, δ, log(eps(eltype(xtm1))))
         n_evals_total += n_evals
-        ℓh
+        ℓh - 2 * c
     else
         sampler.stepsizes[t - 1]
     end
@@ -195,7 +195,7 @@ function adapt_sampler(
 
     stats = (ula_stepsize=h, n_objective_evals=n_evals_total)
 
-    # Consume rngs so that the actual mutation step is less biased.
+    # Consume rng states so that the actual mutation step is less biased.
     rand(rng, size(xtm1))
 
     sampler = @set sampler.stepsizes[t] = h

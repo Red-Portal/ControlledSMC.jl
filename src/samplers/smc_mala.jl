@@ -3,7 +3,7 @@ struct SMCMALA{
     Path<:AbstractPath,
     Stepsizes<:AbstractVector,
     Precond<:Union{<:AbstractMatrix,<:UniformScaling},
-    Adaptor<:AbstractAdaptor
+    Adaptor<:Union{<:AbstractAdaptor,Nothing},
 } <: AbstractSMC
     path         :: Path
     stepsizes    :: Stepsizes
@@ -35,8 +35,8 @@ function SMCMALA(
     end
     @assert length(stepsize) == length(path)
     @assert all(@. 0 < stepsize)
-    return SMCMALA{typeof(path),typeof(stepsizes),typeof(precond),Nothing}(
-        path, stepsizes, precond, nothing, n_mcmc_steps
+    return SMCMALA{typeof(path),typeof(stepsize),typeof(precond),Nothing}(
+        path, stepsize, precond, nothing, n_mcmc_steps
     )
 end
 
@@ -79,7 +79,7 @@ function mutate_with_potential(
 )
     (; stepsizes, precond, n_mcmc_steps) = sampler
     ht = stepsizes[t]
-    Γ  = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
+    Γ = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
 
     xt = xtm1
     for _ in 1:n_mcmc_steps
@@ -138,7 +138,7 @@ function adapt_sampler(
     ℓh = if t == 1
         ℓh, n_evals = find_feasible_point(obj, ℓh_guess, δ, log(eps(eltype(xtm1))))
         n_evals_total += n_evals
-        ℓh
+        ℓh - 2 * c
     else
         sampler.stepsizes[t - 1]
     end
@@ -150,7 +150,7 @@ function adapt_sampler(
 
     stats = (mala_stepsize=h, acceptance_rate=exp(ℓα), n_objective_evals=n_evals_total)
 
-    # Consume rngs so that the actual mutation step is less biased.
+    # Consume rng states so that the actual mutation step is less biased.
     rand(rng, size(xtm1))
 
     sampler = @set sampler.stepsizes[t] = h

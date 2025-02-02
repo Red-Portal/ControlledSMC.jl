@@ -18,11 +18,11 @@ function twist_double_mvnormal_logmarginal(
     sampler::CSMCULA, t::Int, ψ_first, ψ_second, state
 )
     (; stepsizes, precond) = sampler.smc
-    ht, Γ     = stepsizes[t], precond
-    q         = state.q
-    (; a, b)  = ψ_first
-    A         = Diagonal(a)
-    K         = inv(4 * ht * A + inv(Γ))
+    ht, Γ = stepsizes[t], precond
+    q = state.q
+    (; a, b) = ψ_first
+    A = Diagonal(a)
+    K = inv(4 * ht * A + inv(Γ))
     μ_twisted = K * (Γ \ q .- 2 * ht * b)
     Σ_twisted = 2 * ht * K
     return twist_mvnormal_logmarginal(ψ_second, μ_twisted, Σ_twisted)
@@ -31,7 +31,7 @@ end
 function twist_kernel_logmarginal(csmc::CSMCULA, twist, πt, t::Int, xtm1::AbstractMatrix)
     (; stepsizes, precond) = csmc.smc
     ht, Γ = stepsizes[t], precond
-    q     = gradient_flow_euler(πt, xtm1, ht, Γ)
+    q = gradient_flow_euler(πt, xtm1, ht, Γ)
     return twist_mvnormal_logmarginal(twist, q, 2 * ht * Γ)
 end
 
@@ -40,9 +40,9 @@ function rand_initial_with_potential(
 )
     (; proposal,) = path
     (; policy,) = sampler
-    ψ0   = first(policy)
+    ψ0 = first(policy)
     μ, Σ = mean(proposal), Distributions._cov(proposal)
-    x    = twist_mvnormal_rand(rng, ψ0, repeat(μ, 1, n_particles), Σ)
+    x = twist_mvnormal_rand(rng, ψ0, repeat(μ, 1, n_particles), Σ)
 
     ℓG0  = zero(eltype(x))
     ℓqψ0 = twist_mvnormal_logmarginal(ψ0, μ, Σ)
@@ -60,8 +60,8 @@ function mutate_with_potential(
     (; smc, policy, path) = sampler
     (; stepsizes, precond) = smc
     ht, ψ, Γ = stepsizes[t], policy[t], precond
-    q        = gradient_flow_euler(πt, xtm1, ht, Γ)
-    xt       = twist_mvnormal_rand(rng, ψ, q, 2 * ht * Γ)
+    q = gradient_flow_euler(πt, xtm1, ht, Γ)
+    xt = twist_mvnormal_rand(rng, ψ, q, 2 * ht * Γ)
 
     ℓG  = potential(smc, t, πt, πtm1, xt, xtm1)
     ℓψ  = twist_logdensity(ψ, xt)

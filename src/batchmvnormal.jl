@@ -30,14 +30,14 @@ function Base.rand(
 end
 
 function Distributions.logpdf(
-    p::BatchMvNormal{<:AbstractMatrix, <:AbstractMatrix}, x::AbstractMatrix
+    p::BatchMvNormal{<:AbstractMatrix,<:AbstractMatrix}, x::AbstractMatrix
 )
-    (; μ, Σ)   = p
+    (; μ, Σ) = p
     @assert size(μ, 1) == size(x, 1)
     @assert size(μ, 1) == size(Σ, 1)
 
-    d          = size(μ, 1)
-    ℓdetΣ      = logdet(Σ)
-    r2         = invquad(Σ, x - μ)
+    d     = size(μ, 1)
+    ℓdetΣ = logdet(Σ)
+    r2    = invquad(Σ, x - μ)
     return @. (r2 + ℓdetΣ + d * log(2π)) / -2
 end

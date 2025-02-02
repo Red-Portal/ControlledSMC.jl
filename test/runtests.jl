@@ -31,4 +31,5 @@ end
 include("batchmvnormal.jl")
 include("linalg.jl")
 include("interface.jl")
-#include("unbiasedness.jl")
+include("adaptation.jl")
+include("unbiasedness.jl")

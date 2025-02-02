@@ -1,9 +1,6 @@
 
-struct SMCKLMC{
-    Stepsizes<:AbstractVector,
-    Dampings<:AbstractVector,
-    Sigma<:BlockPDMat2by2,
-} <: AbstractSMC
+struct SMCKLMC{Stepsizes<:AbstractVector,Dampings<:AbstractVector,Sigma<:BlockPDMat2by2} <:
+       AbstractSMC
     stepsizes  :: Stepsizes
     dampings   :: Dampings
     sigma_klmc :: Sigma
@@ -14,8 +11,8 @@ function SMCKLMC(n_dims::Int, stepsize::Real, damping::Real, n_steps::Int)
     Σ_pd      = PDMats.PDMat(Σ)
     stepsizes = Fill(stepsize, n_steps)
     dampings  = Fill(damping, n_steps)
-    return SMCKLMC{typeof(stepsizes), typeof(dampings), typeof(Σ_pd)}(
-        stepsizes, dampings, Σ_pd,
+    return SMCKLMC{typeof(stepsizes),typeof(dampings),typeof(Σ_pd)}(
+        stepsizes, dampings, Σ_pd
     )
 end
 

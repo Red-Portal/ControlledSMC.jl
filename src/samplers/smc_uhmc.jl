@@ -19,7 +19,7 @@ function SMCUHMC(
     path::AbstractPath,
     adaptor::AbstractAdaptor;
     mass_matrix::Union{<:AbstractMatrix,<:UniformScaling}=I,
-    refresh_rate_grid::AbstractVector = [0.1, 0.9],
+    refresh_rate_grid::AbstractVector=[0.1, 0.9],
 )
     stepsizes     = zeros(Float64, length(path))
     refresh_rates = zeros(Float64, length(path))
@@ -47,9 +47,9 @@ function SMCUHMC(
     if refresh_rate isa Real
         refresh_rate = fill(refresh_rate, length(path))
     end
-    @assert length(stepsize)    == length(path)
+    @assert length(stepsize) == length(path)
     @assert length(refresh_rate) == length(path)
-    @assert all(@. 0 < stepsize )
+    @assert all(@. 0 < stepsize)
     @assert all(@. 0 < refresh_rate ≤ 1)
     return SMCUHMC{
         typeof(path),
@@ -80,11 +80,11 @@ function mutate_with_potential(
     rng::Random.AbstractRNG, sampler::SMCUHMC, t::Int, πt, πtm1, ztm1::AbstractMatrix
 )
     (; stepsizes, refresh_rates, mass_matrix) = sampler
-    d    = size(ztm1, 1) ÷ 2
+    d = size(ztm1, 1) ÷ 2
     ϵ, ρ = stepsizes[t], refresh_rates[t]
-    M    = (mass_matrix isa UniformScaling) ? mass_matrix(d) : mass_matrix
+    M = (mass_matrix isa UniformScaling) ? mass_matrix(d) : mass_matrix
 
-    xtm1, vtm1 = view(ztm1, 1:d, :), view(ztm1, (d + 1):2*d, :)
+    xtm1, vtm1 = view(ztm1, 1:d, :), view(ztm1, (d + 1):(2 * d), :)
     v_dist     = MvNormal(Zeros(d), M)
 
     vthalf = sqrt(1 - ρ^2) * vtm1 + ρ * unwhiten(M, randn(rng, size(vtm1)))
@@ -96,7 +96,7 @@ function mutate_with_potential(
     ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
 
     L  = BatchMvNormal(sqrt(1 - ρ^2) * vthalf, ρ^2 * M)
-    K  = BatchMvNormal(sqrt(1 - ρ^2) * vtm1,   ρ^2 * M)
+    K  = BatchMvNormal(sqrt(1 - ρ^2) * vtm1, ρ^2 * M)
     ℓl = logpdf(L, vtm1)
     ℓk = logpdf(K, vthalf)
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
@@ -104,11 +104,14 @@ function mutate_with_potential(
 end
 
 function coordinate_descent_uhmc(
-    obj, ρ, ℓh, ρ_grid;
-    n_max_iters          = 32,
-    ℓh_change_coeff      = 0.02,
-    ℓh_change_ratio      = 1.5,
-    abstol               = 1e-2,
+    obj,
+    ρ,
+    ℓh,
+    ρ_grid;
+    n_max_iters     = 32,
+    ℓh_change_coeff = 0.02,
+    ℓh_change_ratio = 1.5,
+    abstol          = 1e-2,
 )
     n_obj_evals     = 0
     coordesc_iters  = 0
@@ -125,9 +128,7 @@ function coordinate_descent_uhmc(
         )
         n_obj_evals += n_lower_bound_evals + n_upper_bound_evals
 
-        ℓh′, n_gss_iters = golden_section_search(
-            obj_ℓh, ℓh_lower, ℓh_upper; abstol
-        )
+        ℓh′, n_gss_iters = golden_section_search(obj_ℓh, ℓh_lower, ℓh_upper; abstol)
         n_obj_evals += 2 * n_gss_iters
 
         ρ′ = argmin(ρ′ -> obj([ℓh′, ρ′]), ρ_grid)
@@ -145,7 +146,7 @@ function coordinate_descent_uhmc(
         ρ  = ρ′
         ℓh = ℓh′
     end
-    return ρ, ℓh, (n_obj_evals=n_obj_evals, n_iters=n_iters,)
+    return ρ, ℓh, (n_obj_evals=n_obj_evals, n_iters=n_iters)
 end
 
 function adapt_sampler(
@@ -172,8 +173,8 @@ function adapt_sampler(
     ρ_grid = sampler.refresh_rate_grid
 
     function obj(ℓh_, ρ_)
-        rng_fixed   = copy(rng)
-        sampler′     = @set sampler.stepsizes[t]     = exp(ℓh_)
+        rng_fixed    = copy(rng)
+        sampler′     = @set sampler.stepsizes[t] = exp(ℓh_)
         sampler′     = @set sampler′.refresh_rates[t] = ρ_
         _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, ztm1_sub)
         τ            = sampler.adaptor.regularization
@@ -191,7 +192,7 @@ function adapt_sampler(
     ϵ = 1e-2
     δ = -1
     ℓh_guess = -7.5
-    ρ_guess  = 0.1
+    ρ_guess = 0.1
     n_evals_total = 0
 
     ℓh, ρ = if t == 1
@@ -199,7 +200,7 @@ function adapt_sampler(
             ℓh_ -> obj(ℓh_, ρ_guess), ℓh_guess, δ, log(eps(eltype(ztm1)))
         )
         n_evals_total += n_evals
-        ℓh, ρ_guess
+        ℓh - 2 * c, ρ_guess
     else
         sampler.stepsizes[t - 1], sampler.refresh_rates[t - 1]
     end
@@ -207,10 +208,10 @@ function adapt_sampler(
     n_max_iters = 10
     i           = 0
     while true
-        ℓh′, n_evals   = minimize(ℓh_ -> obj(ℓh_, ρ), ℓh, c, r, ϵ)
+        ℓh′, n_evals = minimize(ℓh_ -> obj(ℓh_, ρ), ℓh, c, r, ϵ)
         n_evals_total += n_evals
 
-        ρ′             = argmin(ρ_ -> obj(ℓh′, ρ_), ρ_grid)
+        ρ′ = argmin(ρ_ -> obj(ℓh′, ρ_), ρ_grid)
         n_evals_total += length(ρ_grid)
 
         if max(abs(ℓh′ - ℓh), abs(ρ′ - ρ)) < ϵ || i == n_max_iters
@@ -219,23 +220,18 @@ function adapt_sampler(
             break
         end
 
-        i += 1
+        i  += 1
         ρ  = ρ′
         ℓh = ℓh′
     end
-        
-    # Consume rngs so that the actual mutation is less biased.
+
+    # Consume rng states so that the actual mutation is less biased.
     rand(rng, size(ztm1))
 
     h     = exp(ℓh)
-    stats = (
-        coordinate_descent_iterations = i,
-        n_objective_evals             = n_evals_total,
-        uhmc_stepsize                 = h,
-        uhmc_refresh_rate             = ρ,
-    )
+    stats = (coordinate_descent_iterations=i, n_objective_evals=n_evals_total, uhmc_stepsize=h, uhmc_refresh_rate=ρ)
 
-    sampler = @set sampler.stepsizes[t]     = h
+    sampler = @set sampler.stepsizes[t] = h
     sampler = @set sampler.refresh_rates[t] = ρ
     return sampler, stats
 end

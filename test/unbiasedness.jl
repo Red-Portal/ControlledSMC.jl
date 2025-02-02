@@ -35,15 +35,15 @@ end
         ("SMCULA + ForwardKernel", SMCULA(path, 0.5; backward=ForwardKernel())),
         ("SMCUHMC", SMCUHMC(path, 0.5, 0.5)),
         ("SMCMALA", SMCMALA(path, 0.5)),
-        #("SMCKLMC", SMCKLMC(d, 5.0, 10.0, n_iters)),
     ]
         pvalue = run_unbiasedness_test(sampler, n_particles, n_test_samples, Z_true)
 
         # Bonferroni-correct the pvalue since we may have a second try
+        # Refer to: https://personal.utdallas.edu/~herve/abdi-Holm2010-pretty.pdf
         @test if 2 * pvalue > pvalue_threshold
             true
         else
-            pvalue2 = run_unbiasedness_test(sampler, 4 * n_particles, Z_true)
+            pvalue2 = run_unbiasedness_test(sampler, 4 * n_particles, n_test_samples, Z_true)
             pvalue2 > pvalue_threshold
         end
     end

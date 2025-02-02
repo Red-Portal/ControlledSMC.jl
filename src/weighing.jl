@@ -19,23 +19,20 @@ function systematic_sampling(
     return resample_idx
 end
 
+"""
+    ssp_sampling
+
+SSP stands for Srinivasan Sampling Process.
+This resampling scheme is discussed in Gerber *et al.*[^GCW2019]. Basically, it has similar properties as systematic resampling (number of off-springs is either k or k + 1, with
+k <= N W^n < k +1), and in addition is consistent. See that paper for more
+details.
+
+# Reference
+[^GCW2019]: Gerber M., Chopin N. and Whiteley N. (2019). Negative association, ordering and convergence of resampling methods. *The Annals of Statistics* 47 (2019), no. 4, 2236–2260.
+"""
 function ssp_sampling(
     rng::Random.AbstractRNG, weights::AbstractVector, n_resample::Int=length(weights)
 )
-#=
-    SSP resampling.
-
-    SSP stands for Srinivasan Sampling Process. This resampling scheme is
-    discussed in Gerber et al (2019). Basically, it has similar properties as
-    systematic resampling (number of off-springs is either k or k + 1, with
-    k <= N W^n < k +1), and in addition is consistent. See that paper for more
-    details.
-
-    Reference
-    =========
-    Gerber M., Chopin N. and Whiteley N. (2019). Negative association, ordering
-    and convergence of resampling methods. Ann. Statist. 47 (2019), no. 4, 2236–2260.
-=##
     n       = length(weights)
     m       = n_resample
     mw      = m * weights
@@ -43,7 +40,7 @@ function ssp_sampling(
     xi      = mw - n_child
     u       = rand(rng, n - 1)
     i, j    = 1, 2
-    for k in 1:n-1
+    for k in 1:(n - 1)
         δi = min(xi[j], 1 - xi[i])
         δj = min(xi[i], 1 - xi[j])
         ∑δ = δi + δj
@@ -55,11 +52,11 @@ function ssp_sampling(
         end
         if xi[j] < 1 - xi[i]
             xi[i] += δi
-            j      = k + 2
+            j = k + 2
         else
             xi[j]      -= δi
             n_child[i] += 1
-            i           = k + 2
+            i          = k + 2
         end
     end
 
