@@ -104,7 +104,14 @@ function golden_section_search(f, a::Real, b::Real, c::Real; abstol::Real=1e-2)
     return (x1 + x2) / 2, n_evals
 end
 
-function bracket_minimum(f, x0::Real, c::Real, r::Real; n_max_iters::Int=100)
+function bracket_minimum(
+    f,
+    x0::Real,
+    c::Real,
+    r::Real;
+    x_upper_limit::Real = Inf,
+    x_lower_limit::Real = log(eps(Float64))
+)
     @assert c > 0
     @assert r > 1
 
@@ -118,18 +125,18 @@ function bracket_minimum(f, x0::Real, c::Real, r::Real; n_max_iters::Int=100)
     if isfinite(y)
         while true
             x_plus = x0 + c * r^k
+            if x_plus ≥ x_upper_limit
+                throw(
+                    ErrorException(
+                        "Bracket minimum first stage exceeded upper limit $(x_upper_limit) after $(k) iterations, " *
+                        "where x0 = $(x0), x+ = $(x_plus), y = $(y), y′ = $(y′)",
+                    ),
+                )
+            end
             y′ = f(x_plus)
             n_evals += 1
             if !isfinite(y′) || y < y′ || y0 < y′
                 break
-            end
-            if k == n_max_iters
-                throw(
-                    ErrorException(
-                        "Bracket minimum first stage didn't terminate within $(n_max_iters) iterations, " *
-                        "where x0 = $(x0), x+ = $(x_plus), y = $(y), y′ = $(y′)",
-                    ),
-                )
             end
             y = y′
             k += 1
@@ -140,18 +147,18 @@ function bracket_minimum(f, x0::Real, c::Real, r::Real; n_max_iters::Int=100)
     y = f(x_plus - c)
     while true
         x_minus = x_plus - c * r^k
+        if x_minus ≤ x_lower_limit
+            throw(
+                ErrorException(
+                    "Bracket minimum second stage exceeded lower limit $(x_lower_limit) after $(k) iterations, " *
+                    "where x+ = $(x_plus), x- = $(x_minus), y = $(y), y′ = $(y′)",
+                ),
+            )
+        end
         y′ = f(x_minus)
         n_evals += 1
         if isfinite(y′) && isfinite(y) && y < y′
             break
-        end
-        if k == n_max_iters
-            throw(
-                ErrorException(
-                    "Bracket minimum second stage didn't terminate within $(n_max_iters) iterations, " *
-                    "where x+ = $(x_plus), x- = $(x_minus), y = $(y), y′ = $(y′)",
-                ),
-            )
         end
         y = y′
         k += 1
@@ -166,7 +173,7 @@ function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
 
     # x_viz = range(-15, 5; length=64)
     # y_viz = @showprogress map(f, x_viz)
-    # Plots.plot(x_viz, y_viz; ylims=[-Inf, 1e+3]) |> display
+    # Plots.plot(x_viz, y_viz; ylims=[-Inf, 3e+4]) |> display
     # Plots.vline!([x0],      label="x0")      |> display
     # Plots.vline!([x_minus], label="x_minus") |> display
     # Plots.vline!([x_plus],  label="x_plus")  |> display

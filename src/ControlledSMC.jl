@@ -19,6 +19,8 @@ using Statistics
 using StatsBase
 using UnicodePlots
 
+import OhMyThreads
+
 abstract type AbstractSMC end
 
 abstract type AbstractPath end
@@ -36,6 +38,9 @@ include("mcmc.jl")
 include("utils.jl")
 include("batchmvnormal.jl")
 include("logdensity.jl")
+
+include("multithreaded.jl")
+export MultithreadedLogDensityProblem
 
 include("adaptation.jl")
 export NoAdaptation, BackwardKLMin, AcceptanceRateControl, ESJDMax

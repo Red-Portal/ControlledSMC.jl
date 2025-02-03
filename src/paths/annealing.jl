@@ -16,29 +16,26 @@ struct AnnealedDensityProblem{
     adtype    :: AD
 end
 
-function LogDensityProblems.logdensity(prob::AnnealedDensityProblem, x::AbstractVector)
+function logdensity(prob::AnnealedDensityProblem, xs::AbstractMatrix)
     (; annealing, proposal, problem) = prob
-    ℓπ0 = logpdf(proposal, x)
-    ℓπT = LogDensityProblems.logdensity(problem, x)
-    ℓπt = anneal(annealing, ℓπ0, ℓπT)
-    if isfinite(ℓπt)
-        return ℓπt
-    else
-        return -Inf
-    end
+    ℓπ0s = map(Base.Fix1(logpdf, proposal), eachcol(xs))
+    ℓπTs = logdensity(problem, xs)
+    return anneal(annealing, ℓπ0s, ℓπTs)
 end
 
-function LogDensityProblems.logdensity_and_gradient(
-    prob::AnnealedDensityProblem, x::AbstractVector
+function logdensity_and_gradient(
+    prob::AnnealedDensityProblem, xs::AbstractMatrix
 )
     (; annealing, proposal, problem, adtype) = prob
-    ℓπ0, ∇ℓπ0 = value_and_gradient(Base.Fix1(logpdf, proposal), adtype, x)
-    ℓπT, ∇ℓπT = LogDensityProblems.logdensity_and_gradient(problem, x)
-    ℓπt = anneal(annealing, ℓπ0, ℓπT)
-    ∇ℓπt = anneal(annealing, ∇ℓπ0, ∇ℓπT)
-    if isfinite(ℓπt)
-        return ℓπt, ∇ℓπt
-    else
-        return ℓπt, Fill(-Inf, size(∇ℓπt))
+    ℓπ0_and_∇ℓπ0 = map(eachcol(xs)) do x
+        value_and_gradient(Base.Fix1(logpdf, proposal), adtype, x)
     end
+    ℓπ0s = first.(ℓπ0_and_∇ℓπ0)
+    ∇ℓπ0s = hcat(last.(ℓπ0_and_∇ℓπ0)...)
+
+    ℓπTs, ∇ℓπTs = logdensity_and_gradient(problem, xs)
+
+    ℓπts = anneal(annealing, ℓπ0s, ℓπTs)
+    ∇ℓπts = anneal(annealing, ∇ℓπ0s, ∇ℓπTs)
+    return ℓπts, ∇ℓπts
 end
