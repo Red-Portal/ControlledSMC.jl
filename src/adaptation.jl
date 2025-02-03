@@ -173,7 +173,7 @@ function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
 
     # x_viz = range(-15, 5; length=64)
     # y_viz = @showprogress map(f, x_viz)
-    # Plots.plot(x_viz, y_viz; ylims=[-Inf, 3e+4]) |> display
+    # Plots.plot(x_viz, y_viz;) |> display
     # Plots.vline!([x0],      label="x0")      |> display
     # Plots.vline!([x_minus], label="x_minus") |> display
     # Plots.vline!([x_plus],  label="x_plus")  |> display

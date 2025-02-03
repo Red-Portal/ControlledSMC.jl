@@ -138,9 +138,9 @@ function adapt_sampler(
     ℓh = if t == 1
         ℓh, n_evals = find_feasible_point(obj, ℓh_guess, δ, log(eps(eltype(xtm1))))
         n_evals_total += n_evals
-        ℓh - 2 * c
+        ℓh
     else
-        sampler.stepsizes[t - 1]
+        log(sampler.stepsizes[t - 1])
     end
     ℓh, n_evals = minimize(obj, ℓh, c, r, ϵ)
     n_evals_total += n_evals

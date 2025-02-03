@@ -200,9 +200,9 @@ function adapt_sampler(
             ℓh_ -> obj(ℓh_, ρ_guess), ℓh_guess, δ, log(eps(eltype(ztm1)))
         )
         n_evals_total += n_evals
-        ℓh - 2 * c, ρ_guess
+        ℓh, ρ_guess
     else
-        sampler.stepsizes[t - 1], sampler.refresh_rates[t - 1]
+        log(sampler.stepsizes[t - 1]), sampler.refresh_rates[t - 1]
     end
 
     n_max_iters = 10
