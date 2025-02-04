@@ -168,7 +168,7 @@ function bracket_minimum(
 end
 
 function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
-    x_lower_limit= log(eps(typeof(x0)))
+    x_lower_limit= log(eps(Float64))
     x_plus, x_minus, x_int, n_brac_eval = bracket_minimum(f, x0, c, r; x_lower_limit)
     x_opt, n_gold_eval = golden_section_search(f, x_minus, x_int, x_plus; abstol=ϵ)
     n_eval = n_gold_eval + n_brac_eval
