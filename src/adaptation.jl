@@ -52,7 +52,7 @@ function find_feasible_point(f, x0::Real, δ::Real, lb::Real)
     end
     throw(
         ErrorException(
-            "could not find a fesible initial stepsize after $(n_eval) steps: x = $(x), f(x) = $(y), lb = $(lb)",
+            "could not find a feasible initial stepsize after $(n_eval) steps: x = $(x), f(x) = $(y), lb = $(lb)",
         ),
     )
 end
@@ -110,7 +110,7 @@ function bracket_minimum(
     c::Real,
     r::Real;
     x_upper_limit::Real = Inf,
-    x_lower_limit::Real = log(eps(Float64))
+    x_lower_limit::Real = -Inf
 )
     @assert c > 0
     @assert r > 1
@@ -168,12 +168,14 @@ function bracket_minimum(
 end
 
 function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
-    x_plus, x_minus, x_int, n_brac_eval = bracket_minimum(f, x0, c, r)
+    x_lower_limit= log(eps(typeof(x0)))
+    x_plus, x_minus, x_int, n_brac_eval = bracket_minimum(f, x0, c, r; x_lower_limit)
     x_opt, n_gold_eval = golden_section_search(f, x_minus, x_int, x_plus; abstol=ϵ)
+    n_eval = n_gold_eval + n_brac_eval
 
     # x_viz = range(-15, 5; length=64)
     # y_viz = @showprogress map(f, x_viz)
-    # Plots.plot(x_viz, y_viz;) |> display
+    # Plots.plot(x_viz, y_viz) |> display
     # Plots.vline!([x0],      label="x0")      |> display
     # Plots.vline!([x_minus], label="x_minus") |> display
     # Plots.vline!([x_plus],  label="x_plus")  |> display
@@ -183,5 +185,5 @@ function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
     #    throw()
     # end
 
-    return x_opt, n_brac_eval + n_gold_eval
+    return x_opt, n_eval
 end
