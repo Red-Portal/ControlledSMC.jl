@@ -77,7 +77,7 @@ function golden_section_search(f, a::Real, b::Real, c::Real; abstol::Real=1e-2)
     f1 = f(x1)
     f2 = f(x2)
 
-    while abs(x1 - x2) ≥ abstol
+    while abs(x0 - x3) ≥ abstol
         n_evals += 2
         if f2 < f1 || !isfinite(f1)
             x0 = x1
@@ -101,7 +101,7 @@ function golden_section_search(f, a::Real, b::Real, c::Real; abstol::Real=1e-2)
             )
         end
     end
-    return (x1 + x2) / 2, n_evals
+    return (x0 + x3) / 2, n_evals
 end
 
 function bracket_minimum(
@@ -176,7 +176,7 @@ function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
     # x_viz = range(-15, 5; length=64)
     # y_viz = @showprogress map(f, x_viz)
     # @info("", x0, x_minus, x_plus, x_opt, x_int)
-    # Plots.plot(x_viz, y_viz, ylims=(0, 100)) |> display
+    # Plots.plot(x_viz, y_viz, ylims=()) |> display
     # Plots.vline!([x0],      label="x0")      |> display
     # Plots.vline!([x_minus], label="x_minus") |> display
     # Plots.vline!([x_plus],  label="x_plus")  |> display
