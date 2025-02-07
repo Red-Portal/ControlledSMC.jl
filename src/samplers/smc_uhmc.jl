@@ -206,7 +206,7 @@ function adapt_sampler(
     end
 
     n_max_iters = 10
-    i           = 0
+    i           = 1
     while true
         ℓh′, n_evals = minimize(ℓh_ -> obj(ℓh_, ρ), ℓh, c, r, ϵ)
         n_evals_total += n_evals
