@@ -103,52 +103,6 @@ function mutate_with_potential(
     return vcat(xt, vt), ℓG, NamedTuple()
 end
 
-function coordinate_descent_uhmc(
-    obj,
-    ρ,
-    ℓh,
-    ρ_grid;
-    n_max_iters     = 32,
-    ℓh_change_coeff = 0.02,
-    ℓh_change_ratio = 1.5,
-    abstol          = 1e-2,
-)
-    n_obj_evals     = 0
-    coordesc_iters  = 0
-    coordesc_abstol = 1e-2
-    n_iters         = 1
-
-    while true
-        obj_ℓh = ℓh′ -> obj([ℓh′, ρ])
-        ℓh_upper, n_upper_bound_evals = find_golden_section_search_interval(
-            obj_ℓh, ℓh, ℓh_change_coeff, ℓh_change_ratio
-        )
-        ℓh_lower, n_lower_bound_evals = find_golden_section_search_interval(
-            obj_ℓh, ℓh_upper, -ℓh_change_coeff, ℓh_change_ratio
-        )
-        n_obj_evals += n_lower_bound_evals + n_upper_bound_evals
-
-        ℓh′, n_gss_iters = golden_section_search(obj_ℓh, ℓh_lower, ℓh_upper; abstol)
-        n_obj_evals += 2 * n_gss_iters
-
-        ρ′ = argmin(ρ′ -> obj([ℓh′, ρ′]), ρ_grid)
-        n_obj_evals += length(ρ_grid)
-
-        if max(abs(ℓh′ - ℓh), abs(ρ′ - ρ)) < coordesc_abstol ||
-            coordesc_iters == n_max_iters
-            ρ  = ρ′
-            ℓh = ℓh′
-            break
-        end
-
-        n_iters += 1
-
-        ρ  = ρ′
-        ℓh = ℓh′
-    end
-    return ρ, ℓh, (n_obj_evals=n_obj_evals, n_iters=n_iters)
-end
-
 function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCUHMC,
@@ -187,7 +141,7 @@ function adapt_sampler(
         return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) + reg
     end
 
-    r = 2.0
+    r = 3.0
     c = 0.01
     ϵ = 1e-2
     δ = -1

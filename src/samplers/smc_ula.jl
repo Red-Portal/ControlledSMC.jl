@@ -174,11 +174,11 @@ function adapt_sampler(
         return adaptation_objective(sampler.adaptor, ℓwtm1_sub, ℓdPdQ_sub, ℓG_sub) + reg
     end
 
-    r = 1.5
-    c = 0.3
+    r = 2.0
+    c = 0.1
     ϵ = 1e-2
-    δ = -2 * r
-    ℓh_guess = -15.0
+    δ = -1
+    ℓh_guess = -10.0
     n_evals_total = 0
 
     ℓh = if t == 1

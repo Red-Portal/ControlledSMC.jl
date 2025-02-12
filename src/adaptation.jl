@@ -76,21 +76,23 @@ function golden_section_search(f, a::Real, b::Real, c::Real; abstol::Real=1e-2)
 
     f1 = f(x1)
     f2 = f(x2)
+    n_evals += 2
 
     while abs(x0 - x3) ≥ abstol
-        n_evals += 2
         if f2 < f1 || !isfinite(f1)
             x0 = x1
             x1 = x2
             x2 = ϕinv * x2 + ϕinvc * x3
             f1 = f2
             f2 = f(x2)
+            n_evals += 1
         elseif (f2 ≥ f1 || !isfinite(f2)) && isfinite(f1)
             x3 = x2
             x2 = x1
             x1 = ϕinv * x1 + ϕinvc * x0
             f2 = f1
             f1 = f(x1)
+            n_evals += 1
         else
             throw(
                 ErrorException(
@@ -105,73 +107,83 @@ function golden_section_search(f, a::Real, b::Real, c::Real; abstol::Real=1e-2)
 end
 
 function bracket_minimum(
-    f,
-    x0::Real,
-    c::Real,
-    r::Real;
-    x_upper_limit::Real = Inf,
-    x_lower_limit::Real = -Inf
+    f, x0::Real, c::Real, r::Real; x_upper_limit::Real=Inf, x_lower_limit::Real=-Inf
 )
     @assert c > 0
     @assert r > 1
 
+    k  = 0
+    y0 = f(x0)
+    x  = x0
+    y  = y0
+
+    n_evals = 1
     x_plus  = x0
     x_minus = x0
+    x_mid   = x0
 
-    y       = f(x0)
-    y0      = y
-    n_evals = 1
-    k       = 0
     if isfinite(y)
         while true
-            x_plus = x0 + c * r^k
-            if x_plus ≥ x_upper_limit
+            x′ = x0 + c * r^k
+            y′ = f(x′)
+            n_evals += 1
+            if x′ ≥ x_upper_limit
                 throw(
                     ErrorException(
                         "Bracket minimum first stage exceeded upper limit $(x_upper_limit) after $(k) iterations, " *
-                        "where x0 = $(x0), x+ = $(x_plus), y = $(y), y′ = $(y′)",
+                        "where x0 = $(x0), x′ = $(x′), y = $(y), y′ = $(y′)",
                     ),
                 )
             end
-            y′ = f(x_plus)
-            n_evals += 1
-            if !isfinite(y′) || y < y′ || y0 < y′
+            if !isfinite(y′) || y < y′
+                x_plus = x′
+                x0     = x
                 break
             end
+            x = x′
             y = y′
             k += 1
         end
+    else
+        x_plus = x0
+        x      = x0 - c/2
+        y      = f(x)
+        n_evals += 1
     end
-
-    k = 1
-    y = f(x_plus - c)
+    k = 0
     while true
-        x_minus = x_plus - c * r^k
-        if x_minus ≤ x_lower_limit
+        x′ = x0 - c * r^k
+        y′ = f(x′)
+        n_evals += 1
+        if x′ ≤ x_lower_limit
             throw(
                 ErrorException(
                     "Bracket minimum second stage exceeded lower limit $(x_lower_limit) after $(k) iterations, " *
-                    "where x+ = $(x_plus), x- = $(x_minus), y = $(y), y′ = $(y′)",
+                    "where x0 = $(x0), x′ = $(x′), y = $(y), y′ = $(y′)",
                 ),
             )
         end
-        y′ = f(x_minus)
-        n_evals += 1
-        if isfinite(y′) && isfinite(y) && y < y′
+        if isfinite(y′) && isfinite(y) && (y < y′)
+            x_minus = x′
+            x_mid   = x
             break
         end
+        x = x′
         y = y′
         k += 1
     end
-    x_int = x_plus - c * r^(k - 1)
-    return x_plus, x_minus, x_int, n_evals
+    return x_minus, x_mid, x_plus, n_evals
 end
 
 function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
-    x_lower_limit= log(eps(Float64))
-    x_plus, x_minus, x_int, n_brac_eval = bracket_minimum(f, x0, c, r; x_lower_limit)
-    x_opt, n_gold_eval = golden_section_search(f, x_minus, x_int, x_plus; abstol=ϵ)
-    n_eval = n_gold_eval + n_brac_eval
+    x_lower_limit = log(eps(Float64))
+    n_eval_total  = 0
+
+    x_minus, x_mid, x_plus, n_eval = bracket_minimum(f, x0, c, r; x_lower_limit)
+    n_eval_total += n_eval
+
+    x_opt, n_eval = golden_section_search(f, x_minus, x_mid, x_plus; abstol=ϵ)
+    n_eval_total += n_eval
 
     # x_viz = range(-15, 5; length=64)
     # y_viz = @showprogress map(f, x_viz)
@@ -186,5 +198,5 @@ function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
     #    throw()
     # end
 
-    return x_opt, n_eval
+    return x_opt, n_eval_total
 end
