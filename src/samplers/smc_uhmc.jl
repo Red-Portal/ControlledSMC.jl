@@ -179,9 +179,6 @@ function adapt_sampler(
         ℓh = ℓh′
     end
 
-    # Consume rng states so that the actual mutation is less biased.
-    rand(rng, size(ztm1))
-
     h     = exp(ℓh)
     stats = (coordinate_descent_iterations=i, n_objective_evals=n_evals_total, uhmc_stepsize=h, uhmc_refresh_rate=ρ)
 

@@ -195,9 +195,6 @@ function adapt_sampler(
 
     stats = (ula_stepsize=h, n_objective_evals=n_evals_total)
 
-    # Consume rng states so that the actual mutation step is less biased.
-    rand(rng, size(xtm1))
-
     sampler = @set sampler.stepsizes[t] = h
     return sampler, stats
 end

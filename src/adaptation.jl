@@ -185,15 +185,15 @@ function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
     x_opt, n_eval = golden_section_search(f, x_minus, x_mid, x_plus; abstol=ϵ)
     n_eval_total += n_eval
 
-    # x_viz = range(-15, 5; length=64)
+    # x_viz = range(-15, 5; length=128)
     # y_viz = @showprogress map(f, x_viz)
-    # @info("", x0, x_minus, x_plus, x_opt, x_int)
-    # Plots.plot(x_viz, y_viz, ylims=()) |> display
+    # @info("", x0, x_minus, x_plus, x_opt, x_mid)
+    # Plots.plot(x_viz, y_viz, ylims=[-Inf, 2000]) |> display
     # Plots.vline!([x0],      label="x0")      |> display
     # Plots.vline!([x_minus], label="x_minus") |> display
     # Plots.vline!([x_plus],  label="x_plus")  |> display
     # Plots.vline!([x_opt],   label="x_opt")   |> display
-    # Plots.vline!([x_int],   label="x_int")   |> display
+    # Plots.vline!([x_mid],   label="x_int")   |> display
     # if readline() == "n"
     #    throw()
     # end
