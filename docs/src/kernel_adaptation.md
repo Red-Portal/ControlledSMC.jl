@@ -115,7 +115,7 @@ nothing
 Now, the default grid is essentially a set of binary decisions: to refresh the momentum or to not refresh the momentum.
 This is a close approximation of the solution obtained under a finer grid:
 ```@example adaptation
-sampler = SMCUHMC(path, BackwardKLMin(n_subsample=128, regularization=.0), refresh_rate_grid=range(0.1, 0.9; length=16))
+sampler = SMCUHMC(path, BackwardKLMin(n_subsample=128, regularization=5.0), refresh_rate_grid=range(0.1, 0.9; length=16))
 
 _, _, sampler, _, _ = ControlledSMC.sample(
     sampler, n_particles, 0.5; show_progress=false
