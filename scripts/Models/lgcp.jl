@@ -14,7 +14,7 @@ function LogDensityProblems.logdensity(prob::LogGaussianCoxProcess, f_white)
     f    = gp_cov_chol * f_white + gp_mean
     ℓp_f = logpdf(MvNormal(Zeros(length(f)), I), f_white)
     ℓp_y = sum(@. f * counts - area * exp(f))
-    return ℓp_f + ℓp_y - logjac
+    return ℓp_f + ℓp_y + logjac
 end
 
 function LogDensityProblems.capabilities(::Type{<:LogGaussianCoxProcess})
@@ -26,7 +26,7 @@ LogDensityProblems.dimension(prob::LogGaussianCoxProcess) = length(prob.gp_mean)
 function LogGaussianCoxProcess()
     n_grid_points      = 40
     grid_length        = 1.0
-    area               = grid_length / n_grid_points
+    area               = 1/(n_grid_points^2)
     cell_boundaries_1d = range(0, grid_length; length=n_grid_points + 1)
 
     data = readdlm(
@@ -41,8 +41,8 @@ function LogGaussianCoxProcess()
     counts_2d       = hist.weights
     grid_1d_unit    = Float64.(0:(n_grid_points - 1))
     grid_2d_unit    = collect(Iterators.product(grid_1d_unit, grid_1d_unit))
-    coordinates     = reshape(grid_2d_unit, :)
-    coordinates_mat = hcat([point[1] for point in coordinates], [point[2] for point in coordinates])
+    coordinates_tup = reshape(grid_2d_unit, :)
+    coordinates     = hcat([[coords[1], coords[2]] for coords in coordinates_tup]...)
     counts_1d       = reshape(counts_2d, :)
 
     σ2     = 1.91
@@ -50,10 +50,10 @@ function LogGaussianCoxProcess()
     μ0     = log(126) - σ2 / 2
     kernel = σ2 * KernelFunctions.compose(ExponentialKernel(), ScaleTransform(1 / (n_grid_points * β)))
 
-    K       = kernelmatrix(kernel, coordinates_mat; obsdim=1)
+    K       = kernelmatrix(kernel, coordinates; obsdim=2)
     K_chol  = cholesky(K).L
     gp_mean = Fill(μ0, n_grid_points^2)
-    logjac  = logdet(K_chol)
+    logjac  = 0 #-logdet(K_chol)
 
     return LogGaussianCoxProcess{
         typeof(area),typeof(counts_1d),typeof(gp_mean),typeof(K_chol),typeof(logjac)
