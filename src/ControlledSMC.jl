@@ -11,6 +11,7 @@ using Interpolations
 using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
+using OhMyThreads: OhMyThreads
 using PDMats
 using ProgressMeter
 using Random
@@ -19,7 +20,8 @@ using Statistics
 using StatsBase
 using UnicodePlots
 
-using OhMyThreads: OhMyThreads
+const DI = DifferentiationInterface
+
 
 abstract type AbstractSMC end
 
@@ -43,7 +45,7 @@ include("multithreaded.jl")
 export MultithreadedLogDensityProblem
 
 include("adaptation.jl")
-export NoAdaptation, BackwardKLMin, AcceptanceRateControl, ESJDMax
+export BackwardKLMin, AcceptanceRateControl, ESJDMax
 
 # Target Paths
 include("paths/annealing.jl")
@@ -69,6 +71,11 @@ export SMCMALA
 
 include("samplers/smc_uhmc.jl")
 export SMCUHMC
+
+include("samplers/pf.jl")
+
+include("samplers/pf_ula.jl")
+export PFULA
 
 # include("samplers/smc_klmc.jl")
 # export SMCKLMC
