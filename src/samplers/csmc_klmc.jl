@@ -33,8 +33,8 @@ end
 
 function twist_kernel_logmarginal(csmc::CSMCKLMC, twist, πt, t::Int, ztm1::AbstractMatrix)
     (; stepsizes, dampings, sigma_klmc) = csmc.smc
-    h, γ       = stepsizes[t], dampings[t]
-    d          = size(ztm1, 1) ÷ 2
+    h, γ = stepsizes[t], dampings[t]
+    d = size(ztm1, 1) ÷ 2
     xtm1, vtm1 = ztm1[1:d, :], ztm1[(d + 1):end, :]
     μ_klmc = klmc_mean(πt, xtm1, vtm1, h, γ)
     return twist_mvnormal_logmarginal(twist, μ_klmc, sigma_klmc)
@@ -72,7 +72,7 @@ function mutate_with_potential(
     (; smc, policy, path) = sampler
     (; stepsizes, dampings, sigma_klmc) = smc
     h, γ = stepsizes[t], dampings[t]
-    ψ    = policy[t]
+    ψ = policy[t]
 
     d          = size(ztm1, 1) ÷ 2
     xtm1, vtm1 = ztm1[1:d, :], ztm1[(d + 1):end, :]

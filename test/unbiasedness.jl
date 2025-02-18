@@ -1,7 +1,7 @@
 
-function run_unbiasedness_test(sampler, path, n_particles, n_test_samples, Z_true)
+function run_unbiasedness_test(sampler, n_particles, n_test_samples, Z_true)
     ℓZ  = map(1:n_test_samples) do _
-        _, _, _, stats = ControlledSMC.sample(sampler, path, n_particles, 0.5; show_progress=false)
+        _, _, _, _, stats = ControlledSMC.sample(sampler, n_particles, 0.5; show_progress=false)
         last(stats).log_normalizer
     end
     Z   = exp.(ℓZ)
@@ -30,19 +30,20 @@ end
     @testset "$(name)" for (name, sampler) in [
         (
             "SMCULA + TimeCorrectForwardKernel",
-            SMCULA(0.5, n_iters, TimeCorrectForwardKernel(), Eye(d), path),
+            SMCULA(path, 0.5; backward=TimeCorrectForwardKernel()),
         ),
-        ("SMCULA + ForwardKernel", SMCULA(0.5, n_iters, ForwardKernel(), Eye(d))),
-        ("SMCUHMC", SMCUHMC(1.0, 0.5, n_iters, Eye(d))),
-        ("SMCKLMC", SMCKLMC(d, 5.0, 10.0, n_iters)),
+        ("SMCULA + ForwardKernel", SMCULA(path, 0.5; backward=ForwardKernel())),
+        ("SMCUHMC", SMCUHMC(path, 0.5, 0.5)),
+        ("SMCMALA", SMCMALA(path, 0.5)),
     ]
-        pvalue = run_unbiasedness_test(sampler, path, n_particles, n_test_samples, Z_true)
+        pvalue = run_unbiasedness_test(sampler, n_particles, n_test_samples, Z_true)
 
         # Bonferroni-correct the pvalue since we may have a second try
+        # Refer to: https://personal.utdallas.edu/~herve/abdi-Holm2010-pretty.pdf
         @test if 2 * pvalue > pvalue_threshold
             true
         else
-            pvalue2 = run_unbiasedness_test(sampler, path, 4 * n_particles, Z_true)
+            pvalue2 = run_unbiasedness_test(sampler, 4 * n_particles, n_test_samples, Z_true)
             pvalue2 > pvalue_threshold
         end
     end

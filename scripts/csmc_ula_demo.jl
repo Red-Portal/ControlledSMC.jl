@@ -7,7 +7,7 @@ using LogDensityProblems, LogDensityProblemsAD
 using Plots, StatsPlots
 using ProgressMeter
 using Random, Random123
-using ForwardDiff, ReverseDiff, Zygote, Tapir
+using ForwardDiff, ReverseDiff, Zygote
 
 using ControlledSMC
 

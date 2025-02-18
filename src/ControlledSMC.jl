@@ -6,17 +6,20 @@ using Accessors
 using DifferentiationInterface
 using Distributions
 using FillArrays
-using DataInterpolations
+using ForwardDiff
+using Interpolations
 using LinearAlgebra
 using LogDensityProblems
 using LogExpFunctions
-using Optim
 using PDMats
 using ProgressMeter
 using Random
 using ReverseDiff
 using Statistics
+using StatsBase
 using UnicodePlots
+
+import OhMyThreads
 
 abstract type AbstractSMC end
 
@@ -35,6 +38,12 @@ include("mcmc.jl")
 include("utils.jl")
 include("batchmvnormal.jl")
 include("logdensity.jl")
+
+include("multithreaded.jl")
+export MultithreadedLogDensityProblem
+
+include("adaptation.jl")
+export NoAdaptation, BackwardKLMin, AcceptanceRateControl, ESJDMax
 
 # Target Paths
 include("paths/annealing.jl")
@@ -55,11 +64,14 @@ export sample
 include("samplers/smc_ula.jl")
 export SMCULA
 
+include("samplers/smc_mala.jl")
+export SMCMALA
+
 include("samplers/smc_uhmc.jl")
 export SMCUHMC
 
-include("samplers/smc_klmc.jl")
-export SMCKLMC
+# include("samplers/smc_klmc.jl")
+# export SMCKLMC
 
 # Optimized Annlealed SMC
 include("paths/update_schedule.jl")
@@ -74,7 +86,7 @@ export optimize_policy
 include("samplers/csmc_ula.jl")
 export CSMCULA
 
-include("samplers/csmc_klmc.jl")
-export CSMCKLMC
+#include("samplers/csmc_klmc.jl")
+#export CSMCKLMC
 
 end
