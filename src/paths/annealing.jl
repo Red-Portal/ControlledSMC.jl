@@ -23,9 +23,7 @@ function logdensity(prob::AnnealedDensityProblem, xs::AbstractMatrix)
     return anneal(annealing, ℓπ0s, ℓπTs)
 end
 
-function logdensity_and_gradient(
-    prob::AnnealedDensityProblem, xs::AbstractMatrix
-)
+function logdensity_and_gradient(prob::AnnealedDensityProblem, xs::AbstractMatrix)
     (; annealing, proposal, problem, adtype) = prob
     ℓπ0_and_∇ℓπ0 = map(eachcol(xs)) do x
         value_and_gradient(Base.Fix1(logpdf, proposal), adtype, x)

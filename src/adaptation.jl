@@ -146,8 +146,8 @@ function bracket_minimum(
         end
     else
         x_plus = x0
-        x      = x0 - c/2
-        y      = f(x)
+        x = x0 - c / 2
+        y = f(x)
         n_evals += 1
     end
     k = 0

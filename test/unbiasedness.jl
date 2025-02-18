@@ -43,7 +43,9 @@ end
         @test if 2 * pvalue > pvalue_threshold
             true
         else
-            pvalue2 = run_unbiasedness_test(sampler, 4 * n_particles, n_test_samples, Z_true)
+            pvalue2 = run_unbiasedness_test(
+                sampler, 4 * n_particles, n_test_samples, Z_true
+            )
             pvalue2 > pvalue_threshold
         end
     end
