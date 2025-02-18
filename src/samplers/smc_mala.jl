@@ -54,14 +54,13 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
     n_particles = size(x, 2)
 
     μ_fwd  = gradient_flow_euler(πt, x, h, Γ)
-    x_prop = μ_fwd + sqrt(2 * h) * unwhiten(Γ, randn(rng, eltype(μ_fwd), size(μ_fwd)))
-
-    μ_bwd = gradient_flow_euler(πt, x_prop, h, Γ)
+    q_fwd  = BatchMvNormal(μ_fwd, 2 * h * Γ)
+    x_prop = rand(rng, q_fwd)
 
     ℓπt_prop = logdensity_safe(πt, x_prop)
     ℓπt      = logdensity_safe(πt, x)
 
-    q_fwd  = BatchMvNormal(μ_fwd, 2 * h * Γ)
+    μ_bwd  = gradient_flow_euler(πt, x_prop, h, Γ)
     q_bwd  = BatchMvNormal(μ_bwd, 2 * h * Γ)
     ℓq_fwd = logpdf(q_fwd, x_prop)
     ℓq_bwd = logpdf(q_bwd, x)
@@ -155,13 +154,9 @@ function adapt_sampler(
     n_evals_total += n_evals
 
     h     = exp(ℓh)
-    _, ℓα = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
+    _, ℓα = transition_mala(rng, h, Γ, πt, xtm1_sub)
 
-    stats = (mala_stepsize=h, acceptance_rate=exp(ℓα), n_objective_evals=n_evals_total)
-
-    # Consume rng states so that the actual mutation step is less biased.
-    rand(rng, size(xtm1))
-
+    stats   = (mala_stepsize=h, acceptance_rate=exp(ℓα), n_objective_evals=n_evals_total)
     sampler = @set sampler.stepsizes[t] = h
     return sampler, stats
 end

@@ -89,18 +89,18 @@ function mutate_with_potential(
     πtm1 = get_target(path, t - 1)
 
     xtm1, vtm1 = view(ztm1, 1:d, :), view(ztm1, (d + 1):(2 * d), :)
-    v_dist     = MvNormal(Zeros(d), M)
+    v_dist     = BatchMvNormal(Zeros(size(vtm1)), M)
 
-    vthalf = sqrt(1 - ρ^2) * vtm1 + ρ * unwhiten(M, randn(rng, size(vtm1)))
+    K      = BatchMvNormal(sqrt(1 - ρ^2) * vtm1, ρ^2 * M)
+    vthalf = rand(rng, K)
     xt, vt = leapfrog(πt, xtm1, vthalf, ϵ, M)
 
     ℓπt     = logdensity_safe(πt, xt)
     ℓπtm1   = logdensity_safe(πtm1, xtm1)
-    ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
-    ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
+    ℓauxt   = logpdf(v_dist, vt)
+    ℓauxtm1 = logpdf(v_dist, vtm1)
 
     L  = BatchMvNormal(sqrt(1 - ρ^2) * vthalf, ρ^2 * M)
-    K  = BatchMvNormal(sqrt(1 - ρ^2) * vtm1, ρ^2 * M)
     ℓl = logpdf(L, vtm1)
     ℓk = logpdf(K, vthalf)
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
@@ -117,9 +117,6 @@ function adapt_sampler(
     if isnothing(sampler.adaptor)
         return sampler, NamedTuple()
     end
-    path = sampler.path
-    πt   = get_target(path, t)
-    πtm1 = get_target(path, t - 1)
 
     # Subsample particles to reduce adaptation overhead
     w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
