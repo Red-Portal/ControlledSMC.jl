@@ -68,7 +68,7 @@ end
 function rand_initial_with_potential(
     rng::Random.AbstractRNG, sampler::SMCUHMC, n_particles::Int
 )
-    (; mass_matrix, path) = sampler
+    (; path, mass_matrix) = sampler
     (; proposal,) = path
 
     x      = rand(rng, proposal, n_particles)
@@ -121,7 +121,7 @@ function adapt_sampler(
     # Subsample particles to reduce adaptation overhead
     w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
     n_sub     = sampler.adaptor.n_subsample
-    sub_idx   = systematic_sampling(rng, w_norm, n_sub)
+    sub_idx   = ssp_sampling(rng, w_norm, n_sub)
     ztm1_sub  = ztm1[:, sub_idx]
     ℓdPdQ_sub = ℓwtm1[sub_idx]
     ℓwtm1_sub = fill(-log(n_sub), n_sub)
