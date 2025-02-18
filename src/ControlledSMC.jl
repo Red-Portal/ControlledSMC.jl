@@ -19,7 +19,7 @@ using Statistics
 using StatsBase
 using UnicodePlots
 
-import OhMyThreads
+using OhMyThreads: OhMyThreads
 
 abstract type AbstractSMC end
 

@@ -2,11 +2,12 @@
 @testset "minimize" begin
     x_opt = 2
     x_inf = 3
-    f(x) = if x > x_inf
-        Inf
-    else
-        (x - x_opt)^2
-    end
+    f(x) =
+        if x > x_inf
+            Inf
+        else
+            (x - x_opt)^2
+        end
 
     c  = 0.5
     r  = 1.5

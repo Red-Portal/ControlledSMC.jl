@@ -13,6 +13,8 @@ struct SMCULA{
     adaptor   :: Adaptor
 end
 
+Base.length(sampler::SMCULA) = length(sampler.path)
+
 function SMCULA(
     path::AbstractPath,
     adaptor::AbstractAdaptor;
@@ -43,13 +45,24 @@ function SMCULA(
     )
 end
 
-function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCULA, t::Int, πt, πtm1, xtm1::AbstractMatrix
+function rand_initial_with_potential(
+    rng::Random.AbstractRNG, sampler::SMCULA, n_particles::Int
 )
-    (; stepsizes, precond) = sampler
+    x  = rand(rng, sampler.path.proposal, n_particles)
+    ℓG = zeros(eltype(eltype(x)), n_particles)
+    return x, ℓG
+end
+
+function mutate_with_potential(
+    rng::Random.AbstractRNG, sampler::SMCULA, t::Int, xtm1::AbstractMatrix
+)
+    (; path, stepsizes, precond) = sampler
+    πt = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
     ht = stepsizes[t]
     Γ = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
-    q = gradient_flow_euler(πt, xtm1, ht, Γ)
+
+    q  = gradient_flow_euler(πt, xtm1, ht, Γ)
     xt = q + sqrt(2 * ht) * unwhiten(Γ, randn(rng, eltype(q), size(q)))
     ℓG = potential(sampler, t, πt, πtm1, xt, xtm1, q)
     return xt, ℓG, (q=q,)
@@ -142,14 +155,16 @@ function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCULA,
     t::Int,
-    πt,
-    πtm1,
     xtm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
     if isnothing(sampler.adaptor)
         return sampler, NamedTuple()
     end
+
+    path = sampler.path
+    πt   = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
 
     # Subsample particles to reduce adaptation overhead
     w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
@@ -164,7 +179,7 @@ function adapt_sampler(
     function obj(ℓh′)
         rng_fixed    = copy(rng)
         sampler′     = @set sampler.stepsizes[t] = exp(ℓh′)
-        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
+        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, xtm1_sub)
         reg          = if t == 1
             τ * abs2(ℓh′)
         else

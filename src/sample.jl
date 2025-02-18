@@ -1,12 +1,4 @@
 
-function rand_initial_with_potential(
-    rng::Random.AbstractRNG, ::AbstractSMC, path::AbstractPath, n_particles::Int
-)
-    x  = rand(rng, path.proposal, n_particles)
-    ℓG = zeros(eltype(eltype(x)), n_particles)
-    return x, ℓG
-end
-
 function log_potential_moments(ℓw::AbstractVector, ℓG::AbstractVector)
     ℓ∑w = logsumexp(ℓw)
     ℓG1 = logsumexp(ℓw + ℓG) - ℓ∑w
@@ -15,9 +7,9 @@ function log_potential_moments(ℓw::AbstractVector, ℓG::AbstractVector)
 end
 
 function adapt_sampler(
-    ::Random.AbstractRNG, sampler, ::Int, ::Any, ::Any, ::AbstractMatrix, ::AbstractVector
+    ::Random.AbstractRNG, sampler, ::Int, ::AbstractMatrix, ::AbstractVector
 )
-    return sampler
+    return sampler, NamedTuple()
 end
 
 function sample(
@@ -30,13 +22,12 @@ function sample(
 )
     @assert 0 ≤ resample_threshold ≤ 1
 
-    path    = sampler.path
-    n_iters = length(path)
+    n_iters = length(sampler)
     states  = NamedTuple[]
     infos   = NamedTuple[]
     prog    = ProgressMeter.Progress(n_iters + 1; showspeed=true, enabled=show_progress)
 
-    x, ℓG = rand_initial_with_potential(rng, sampler, path, n_particles)
+    x, ℓG = rand_initial_with_potential(rng, sampler, n_particles)
     ℓZ    = zero(eltype(x))
     ℓw    = ℓG
 
@@ -61,11 +52,9 @@ function sample(
     push!(infos, info)
     pm_next!(prog, info)
 
-    target_prev = get_target(path, 0)
     for t in 1:n_iters
-        target        = get_target(path, t)
-        sampler, info = adapt_sampler(rng, sampler, t, target, target_prev, x, ℓw)
-        x, ℓG, aux    = mutate_with_potential(rng, sampler, t, target, target_prev, x)
+        sampler, info = adapt_sampler(rng, sampler, t, x, ℓw)
+        x, ℓG, aux    = mutate_with_potential(rng, sampler, t, x)
 
         ℓG = @. ifelse(isfinite(ℓG), ℓG, -Inf)
 
@@ -94,7 +83,6 @@ function sample(
             ℓG = ℓG[ancestors]
         end
 
-        target_prev = target
         state = merge((particles=x, log_potential=ℓG), aux)
         info = merge((iteration=t, ess=ess, log_normalizer=ℓZ, resampled=resampled), info)
 

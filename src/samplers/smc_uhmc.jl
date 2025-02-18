@@ -15,6 +15,8 @@ struct SMCUHMC{
     refresh_rate_grid :: RefreshRateGrid
 end
 
+Base.length(sampler::SMCUHMC) = length(sampler.path)
+
 function SMCUHMC(
     path::AbstractPath,
     adaptor::AbstractAdaptor;
@@ -64,9 +66,9 @@ function SMCUHMC(
 end
 
 function rand_initial_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCUHMC, path::AbstractPath, n_particles::Int
+    rng::Random.AbstractRNG, sampler::SMCUHMC, n_particles::Int
 )
-    (; mass_matrix,) = sampler
+    (; mass_matrix, path) = sampler
     (; proposal,) = path
 
     x      = rand(rng, proposal, n_particles)
@@ -77,12 +79,14 @@ function rand_initial_with_potential(
 end
 
 function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCUHMC, t::Int, πt, πtm1, ztm1::AbstractMatrix
+    rng::Random.AbstractRNG, sampler::SMCUHMC, t::Int, ztm1::AbstractMatrix
 )
-    (; stepsizes, refresh_rates, mass_matrix) = sampler
+    (; path, stepsizes, refresh_rates, mass_matrix) = sampler
     d = size(ztm1, 1) ÷ 2
     ϵ, ρ = stepsizes[t], refresh_rates[t]
     M = (mass_matrix isa UniformScaling) ? mass_matrix(d) : mass_matrix
+    πt = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
 
     xtm1, vtm1 = view(ztm1, 1:d, :), view(ztm1, (d + 1):(2 * d), :)
     v_dist     = MvNormal(Zeros(d), M)
@@ -107,14 +111,15 @@ function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCUHMC,
     t::Int,
-    πt,
-    πtm1,
     ztm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
     if isnothing(sampler.adaptor)
         return sampler, NamedTuple()
     end
+    path = sampler.path
+    πt   = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
 
     # Subsample particles to reduce adaptation overhead
     w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
@@ -130,7 +135,7 @@ function adapt_sampler(
         rng_fixed    = copy(rng)
         sampler′     = @set sampler.stepsizes[t] = exp(ℓh_)
         sampler′     = @set sampler′.refresh_rates[t] = ρ_
-        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, ztm1_sub)
+        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, ztm1_sub)
         τ            = sampler.adaptor.regularization
         reg          = if t == 1
             τ * abs2(ℓh_)
