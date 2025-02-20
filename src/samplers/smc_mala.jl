@@ -114,9 +114,10 @@ function adapt_sampler(
     πt   = get_target(path, t)
 
     # Subsample particles to reduce adaptation overhead
-    n_particles = size(xtm1, 2)
-    idx_sub     = StatsBase.sample(rng, 1:n_particles, sampler.adaptor.n_subsample; replace=false)
-    xtm1_sub    = xtm1[:, idx_sub]
+    w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
+    n_sub     = sampler.adaptor.n_subsample
+    sub_idx   = ssp_sampling(rng, w_norm, n_sub)
+    xtm1_sub  = xtm1[:, sub_idx]
 
     precond = sampler.precond
     Γ       = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
