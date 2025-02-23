@@ -1,11 +1,11 @@
 
 abstract type AbstractParticleFilter <: AbstractSMC end
 
-function rand_transition(::Random.AbstractRNG, ::AbstractParticleFilter, ::Int, ::AbstractMatrix) end
-
-function logpdf_transition(::AbstractParticleFilter, ::Int, ::AbstractMatrix, ::AbstractMatrix) end
+function transition(::AbstractParticleFilter, ::Int, ::AbstractVector) end
 
 function potential(::AbstractParticleFilter, ::Int, ::AbstractMatrix) end
+
+function kalman_update(::Any, ::Any) end
 
 function mutate_with_potential(
     rng::Random.AbstractRNG,
@@ -13,7 +13,10 @@ function mutate_with_potential(
     t::Int,
     x::AbstractMatrix
 )
-    x′ = rand_transition(rng, sampler, t, x)
+    x′ = mapslices(x, dims=1) do xn
+        Mn = transition(sampler, t, xn)
+        rand(rng, Mn)
+    end
     ℓG = potential(sampler, t, x′)
     x′, ℓG, NamedTuple()
 end

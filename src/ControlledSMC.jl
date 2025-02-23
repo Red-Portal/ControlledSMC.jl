@@ -74,9 +74,6 @@ export SMCUHMC
 
 include("samplers/pf.jl")
 
-include("samplers/pf_ula.jl")
-export PFULA
-
 # include("samplers/smc_klmc.jl")
 # export SMCKLMC
 
