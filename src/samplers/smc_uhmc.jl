@@ -15,6 +15,8 @@ struct SMCUHMC{
     refresh_rate_grid :: RefreshRateGrid
 end
 
+Base.length(sampler::SMCUHMC) = length(sampler.path)
+
 function SMCUHMC(
     path::AbstractPath,
     adaptor::AbstractAdaptor;
@@ -64,9 +66,9 @@ function SMCUHMC(
 end
 
 function rand_initial_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCUHMC, path::AbstractPath, n_particles::Int
+    rng::Random.AbstractRNG, sampler::SMCUHMC, n_particles::Int
 )
-    (; mass_matrix,) = sampler
+    (; path, mass_matrix) = sampler
     (; proposal,) = path
 
     x      = rand(rng, proposal, n_particles)
@@ -77,26 +79,28 @@ function rand_initial_with_potential(
 end
 
 function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCUHMC, t::Int, πt, πtm1, ztm1::AbstractMatrix
+    rng::Random.AbstractRNG, sampler::SMCUHMC, t::Int, ztm1::AbstractMatrix
 )
-    (; stepsizes, refresh_rates, mass_matrix) = sampler
+    (; path, stepsizes, refresh_rates, mass_matrix) = sampler
     d = size(ztm1, 1) ÷ 2
     ϵ, ρ = stepsizes[t], refresh_rates[t]
     M = (mass_matrix isa UniformScaling) ? mass_matrix(d) : mass_matrix
+    πt = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
 
     xtm1, vtm1 = view(ztm1, 1:d, :), view(ztm1, (d + 1):(2 * d), :)
-    v_dist     = MvNormal(Zeros(d), M)
+    v_dist     = BatchMvNormal(Zeros(size(vtm1)), M)
 
-    vthalf = sqrt(1 - ρ^2) * vtm1 + ρ * unwhiten(M, randn(rng, size(vtm1)))
+    K      = BatchMvNormal(sqrt(1 - ρ^2) * vtm1, ρ^2 * M)
+    vthalf = rand(rng, K)
     xt, vt = leapfrog(πt, xtm1, vthalf, ϵ, M)
 
     ℓπt     = logdensity_safe(πt, xt)
     ℓπtm1   = logdensity_safe(πtm1, xtm1)
-    ℓauxt   = logpdf.(Ref(v_dist), eachcol(vt))
-    ℓauxtm1 = logpdf.(Ref(v_dist), eachcol(vtm1))
+    ℓauxt   = logpdf(v_dist, vt)
+    ℓauxtm1 = logpdf(v_dist, vtm1)
 
     L  = BatchMvNormal(sqrt(1 - ρ^2) * vthalf, ρ^2 * M)
-    K  = BatchMvNormal(sqrt(1 - ρ^2) * vtm1, ρ^2 * M)
     ℓl = logpdf(L, vtm1)
     ℓk = logpdf(K, vthalf)
     ℓG = ℓπt + ℓauxt - ℓπtm1 - ℓauxtm1 + ℓl - ℓk
@@ -107,8 +111,6 @@ function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCUHMC,
     t::Int,
-    πt,
-    πtm1,
     ztm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
@@ -119,7 +121,7 @@ function adapt_sampler(
     # Subsample particles to reduce adaptation overhead
     w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
     n_sub     = sampler.adaptor.n_subsample
-    sub_idx   = systematic_sampling(rng, w_norm, n_sub)
+    sub_idx   = ssp_sampling(rng, w_norm, n_sub)
     ztm1_sub  = ztm1[:, sub_idx]
     ℓdPdQ_sub = ℓwtm1[sub_idx]
     ℓwtm1_sub = fill(-log(n_sub), n_sub)
@@ -130,7 +132,7 @@ function adapt_sampler(
         rng_fixed    = copy(rng)
         sampler′     = @set sampler.stepsizes[t] = exp(ℓh_)
         sampler′     = @set sampler′.refresh_rates[t] = ρ_
-        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, ztm1_sub)
+        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, ztm1_sub)
         τ            = sampler.adaptor.regularization
         reg          = if t == 1
             τ * abs2(ℓh_)

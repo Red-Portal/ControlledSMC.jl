@@ -29,6 +29,15 @@ function Base.rand(
     return L * ϵ + μ
 end
 
+function Distributions.rand(
+    rng::Random.AbstractRNG, p::BatchMvNormal{<:AbstractMatrix,<:AbstractMatrix}
+)
+    (; μ, Σ) = p
+    @assert size(μ, 1) == size(Σ, 1)
+    ϵ = randn(rng, size(μ))
+    return unwhiten(Σ, ϵ) + μ
+end
+
 function Distributions.logpdf(
     p::BatchMvNormal{<:AbstractMatrix,<:AbstractMatrix}, x::AbstractMatrix
 )

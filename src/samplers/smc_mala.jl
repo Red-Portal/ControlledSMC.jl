@@ -12,6 +12,8 @@ struct SMCMALA{
     n_mcmc_steps :: Int
 end
 
+Base.length(sampler::SMCMALA) = length(sampler.path)
+
 function SMCMALA(
     path::AbstractPath,
     adaptor::Union{<:AcceptanceRateControl,<:ESJDMax};
@@ -40,18 +42,25 @@ function SMCMALA(
     )
 end
 
+function rand_initial_with_potential(
+    rng::Random.AbstractRNG, sampler::SMCMALA, n_particles::Int
+)
+    x  = rand(rng, sampler.path.proposal, n_particles)
+    ℓG = zeros(eltype(eltype(x)), n_particles)
+    return x, ℓG
+end
+
 function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
     n_particles = size(x, 2)
 
     μ_fwd  = gradient_flow_euler(πt, x, h, Γ)
-    x_prop = μ_fwd + sqrt(2 * h) * unwhiten(Γ, randn(rng, eltype(μ_fwd), size(μ_fwd)))
-
-    μ_bwd = gradient_flow_euler(πt, x_prop, h, Γ)
+    q_fwd  = BatchMvNormal(μ_fwd, 2 * h * Γ)
+    x_prop = rand(rng, q_fwd)
 
     ℓπt_prop = logdensity_safe(πt, x_prop)
     ℓπt      = logdensity_safe(πt, x)
 
-    q_fwd  = BatchMvNormal(μ_fwd, 2 * h * Γ)
+    μ_bwd  = gradient_flow_euler(πt, x_prop, h, Γ)
     q_bwd  = BatchMvNormal(μ_bwd, 2 * h * Γ)
     ℓq_fwd = logpdf(q_fwd, x_prop)
     ℓq_bwd = logpdf(q_bwd, x)
@@ -70,14 +79,12 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
     return x_next, ℓEα
 end
 
-function potential(::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix)
-    return logdensity_safe(πt, xtm1) - logdensity_safe(πtm1, xtm1)
-end
-
 function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix
+    rng::Random.AbstractRNG, sampler::SMCMALA, t::Int, xtm1::AbstractMatrix
 )
-    (; stepsizes, precond, n_mcmc_steps) = sampler
+    (; path, stepsizes, precond, n_mcmc_steps) = sampler
+    πt = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
     ht = stepsizes[t]
     Γ = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
 
@@ -89,26 +96,28 @@ function mutate_with_potential(
     return xt, ℓG, NamedTuple()
 end
 
-using Plots
+function potential(::SMCMALA, t::Int, πt, πtm1, xtm1::AbstractMatrix)
+    return logdensity_safe(πt, xtm1) - logdensity_safe(πtm1, xtm1)
+end
 
 function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCMALA,
     t::Int,
-    πt,
-    πtm1,
     xtm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
     if isnothing(sampler.adaptor)
         return sampler, NamedTuple()
     end
+    path = sampler.path
+    πt   = get_target(path, t)
 
     # Subsample particles to reduce adaptation overhead
-    n_particles = size(xtm1, 2)
-    idx_sub     = StatsBase.sample(rng, 1:n_particles, sampler.adaptor.n_subsample; replace=false)
-    xtm1_sub    = xtm1[:, idx_sub]
-    ℓwtm1_sub   = ℓwtm1[idx_sub]
+    w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
+    n_sub     = sampler.adaptor.n_subsample
+    sub_idx   = ssp_sampling(rng, w_norm, n_sub)
+    xtm1_sub  = xtm1[:, sub_idx]
 
     precond = sampler.precond
     Γ       = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
@@ -128,11 +137,11 @@ function adapt_sampler(
         return adaptation_objective(sampler.adaptor, ℓα, esjd) + reg
     end
 
-    r = 1.5
-    c = 0.3
+    r = 2.0
+    c = 0.1
     ϵ = 1e-2
     δ = -1
-    ℓh_guess = -15.0
+    ℓh_guess = -10.0
     n_evals_total = 0
 
     ℓh = if t == 1
@@ -146,13 +155,9 @@ function adapt_sampler(
     n_evals_total += n_evals
 
     h     = exp(ℓh)
-    _, ℓα = transition_mala(rng, exp(ℓh), Γ, πt, xtm1_sub)
+    _, ℓα = transition_mala(rng, h, Γ, πt, xtm1_sub)
 
-    stats = (mala_stepsize=h, acceptance_rate=exp(ℓα), n_objective_evals=n_evals_total)
-
-    # Consume rng states so that the actual mutation step is less biased.
-    rand(rng, size(xtm1))
-
+    stats   = (mala_stepsize=h, acceptance_rate=exp(ℓα), n_objective_evals=n_evals_total)
     sampler = @set sampler.stepsizes[t] = h
     return sampler, stats
 end

@@ -250,7 +250,6 @@ const posteriordb_problems = [
     "iohmm_reg_simulated-iohmm_reg",
     "fims_Aus_Jpn_irt-2pl_latent_reg_irt",
     "timssAusTwn_irt-gpcm_latent_reg_irt",
-    "uk_drivers-state_space_stochastic_level_stochastic_seasonal",
     "science_irt-grsm_latent_reg_irt",
     "Mh_data-Mh_model",
     "uk_drivers-state_space_stochastic_level_stochastic_seasonal",
@@ -490,20 +489,22 @@ function process_data()
         "brownian",
         "funnel",
         "sonar",
-        "lgcp",
+        #"lgcp",
         "bones_data-bones_model",
         "surgical_data-surgical_model",
         "GLMM_data-GLMM1_model",
+        "science_irt-grsm_latent_reg_irt",
         "irt_2pl-irt_2pl",
         "butterfly-multi_occupancy",
         "rats_data-rats_model",
-        "rstan_downloads-prophet",
+        "diamonds-diamonds",
+        "uk_drivers-state_space_stochastic_level_stochastic_seasonal",
         "radon_mn-radon_hierarchical_intercept_centered", 
-        "radon_mn-radon_hierarchical_intercept_noncentered",
         "seeds_data-seeds_centered_model",
         "seeds_data-seeds_model",
         "seeds_data-seeds_stanified_model",
         "pilots-pilots",
+        "Mh_data-Mh_model",
         "loss_curves-losscurve_sislob",
         "hmm_gaussian_simulated-hmm_gaussian",
         ],
@@ -551,11 +552,11 @@ function process_data()
             end
 
             begin "stepsizes"
-                stepsizes = [last(r.stepsizes)       for r in row]
+                stepsizes = [last(r.stepsizes) for r in row]
                 schedules = [last(r.schedules) for r in row]
                 for (i, id) in enumerate(1:4:length(stepsizes))
                     write(h5, "stepsize_$(i)_x", schedules[id][2:end])
-                    write(h5, "stepsize_$(i)_y", stepsizes[id][2:end])
+                    write(h5, "stepsize_$(i)_y", stepsizes[id])
                 end
             end
 
@@ -575,15 +576,5 @@ function process_data()
                end
             end
         end
-
-        #x = [1e-7, 100]
-        #y = @chain [out[2], out[3] - out[2], out[1] - out[2]]  begin
-        #    reshape(_, (3, 1))
-        #    repeat(_, inner=(1, 2))
-        #end
-
-        #write(h5, "adaptive_smc_x", x)
-        #write(h5, "adaptive_smc_y", y)
     end
 end
-

@@ -13,6 +13,8 @@ struct SMCULA{
     adaptor   :: Adaptor
 end
 
+Base.length(sampler::SMCULA) = length(sampler.path)
+
 function SMCULA(
     path::AbstractPath,
     adaptor::AbstractAdaptor;
@@ -43,40 +45,45 @@ function SMCULA(
     )
 end
 
-function mutate_with_potential(
-    rng::Random.AbstractRNG, sampler::SMCULA, t::Int, πt, πtm1, xtm1::AbstractMatrix
+function rand_initial_with_potential(
+    rng::Random.AbstractRNG, sampler::SMCULA, n_particles::Int
 )
-    (; stepsizes, precond) = sampler
+    x  = rand(rng, sampler.path.proposal, n_particles)
+    ℓG = zeros(eltype(eltype(x)), n_particles)
+    return x, ℓG
+end
+
+function mutate_with_potential(
+    rng::Random.AbstractRNG, sampler::SMCULA, t::Int, xtm1::AbstractMatrix
+)
+    (; path, stepsizes, precond) = sampler
+    πt = get_target(path, t)
     ht = stepsizes[t]
     Γ = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
-    q = gradient_flow_euler(πt, xtm1, ht, Γ)
-    xt = q + sqrt(2 * ht) * unwhiten(Γ, randn(rng, eltype(q), size(q)))
-    ℓG = potential(sampler, t, πt, πtm1, xt, xtm1, q)
+
+    q  = gradient_flow_euler(πt, xtm1, ht, Γ)
+    K  = BatchMvNormal(q, 2 * ht * Γ)
+    xt = rand(rng, K)
+    ℓG = potential(sampler, t, xt, xtm1, K)
     return xt, ℓG, (q=q,)
 end
 
 function potential(
-    sampler::SMCULA,
-    t::Int,
-    πt,
-    πtm1,
-    xt::AbstractMatrix,
-    xtm1::AbstractMatrix,
-    q_fwd::AbstractMatrix,
+    sampler::SMCULA, t::Int, xt::AbstractMatrix, xtm1::AbstractMatrix, K::BatchMvNormal
 )
-    return potential_with_backward(sampler, sampler.backward, t, πt, πtm1, xt, xtm1, q_fwd)
+    return potential_with_backward(sampler, sampler.backward, t, xt, xtm1, K)
 end
 
 function potential_with_backward(
-    ::SMCULA,
+    sampler::SMCULA,
     ::DetailedBalance,
     t::Int,
-    πt,
-    πtm1,
     xt::AbstractMatrix,
     xtm1::AbstractMatrix,
-    ::AbstractMatrix,
+    ::BatchMvNormal,
 )
+    πt   = get_target(sampler.path, t)
+    πtm1 = get_target(sampler.path, t - 1)
     return logdensity_safe(πt, xtm1) - logdensity_safe(πtm1, xtm1)
 end
 
@@ -84,17 +91,15 @@ function potential_with_backward(
     sampler::SMCULA,
     ::TimeCorrectForwardKernel,
     t::Int,
-    πt,
-    πtm1,
     xt::AbstractMatrix,
     xtm1::AbstractMatrix,
-    q_fwd::AbstractMatrix,
+    K::BatchMvNormal,
 )
-    (; stepsizes, precond) = sampler
-    ht = stepsizes[t]
+    (; path, stepsizes, precond) = sampler
+    πt = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
     Γ = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
     ℓπt_xt = logdensity_safe(πt, xt)
-    K = BatchMvNormal(q_fwd, 2 * ht * Γ)
     ℓk = logpdf(K, xt)
 
     if t == 1
@@ -113,18 +118,17 @@ function potential_with_backward(
     sampler::SMCULA,
     ::ForwardKernel,
     t::Int,
-    πt,
-    πtm1,
     xt::AbstractMatrix,
     xtm1::AbstractMatrix,
-    q_fwd::AbstractMatrix,
+    K::BatchMvNormal,
 )
-    (; stepsizes, precond) = sampler
+    (; path, stepsizes, precond) = sampler
+    ht = stepsizes[t]
+    Γ = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
+    πt = get_target(path, t)
+    πtm1 = get_target(path, t - 1)
 
-    ht     = stepsizes[t]
-    Γ      = precond isa UniformScaling ? precond(size(xtm1, 1)) : precond
     ℓπt_xt = logdensity_safe(πt, xt)
-    K      = BatchMvNormal(q_fwd, 2 * ht * Γ)
     ℓk     = logpdf(K, xt)
 
     if t == 1
@@ -142,19 +146,16 @@ function adapt_sampler(
     rng::Random.AbstractRNG,
     sampler::SMCULA,
     t::Int,
-    πt,
-    πtm1,
     xtm1::AbstractMatrix,
     ℓwtm1::AbstractVector,
 )
     if isnothing(sampler.adaptor)
         return sampler, NamedTuple()
     end
-
     # Subsample particles to reduce adaptation overhead
     w_norm    = exp.(ℓwtm1 .- logsumexp(ℓwtm1))
     n_sub     = sampler.adaptor.n_subsample
-    sub_idx   = systematic_sampling(rng, w_norm, n_sub)
+    sub_idx   = ssp_sampling(rng, w_norm, n_sub)
     xtm1_sub  = xtm1[:, sub_idx]
     ℓdPdQ_sub = ℓwtm1[sub_idx]
     ℓwtm1_sub = fill(-log(n_sub), n_sub)
@@ -164,7 +165,7 @@ function adapt_sampler(
     function obj(ℓh′)
         rng_fixed    = copy(rng)
         sampler′     = @set sampler.stepsizes[t] = exp(ℓh′)
-        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, πt, πtm1, xtm1_sub)
+        _, ℓG_sub, _ = mutate_with_potential(rng_fixed, sampler′, t, xtm1_sub)
         reg          = if t == 1
             τ * abs2(ℓh′)
         else
