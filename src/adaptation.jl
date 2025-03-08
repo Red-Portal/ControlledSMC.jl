@@ -122,33 +122,44 @@ function bracket_minimum(
     x_minus = x0
     x_mid   = x0
 
-    if isfinite(y)
-        while true
-            x′ = x0 + c * r^k
-            y′ = f(x′)
-            n_evals += 1
-            if x′ ≥ x_upper_limit
-                throw(
-                    ErrorException(
-                        "Bracket minimum first stage exceeded upper limit $(x_upper_limit) after $(k) iterations, " *
-                        "where x0 = $(x0), x′ = $(x′), y = $(y), y′ = $(y′)",
-                    ),
-                )
-            end
-            if !isfinite(y′) || y < y′
-                x_plus = x′
-                x0     = x
-                break
-            end
-            x = x′
-            y = y′
-            k += 1
-        end
-    else
-        x_plus = x0
-        x = x0 - c / 2
-        y = f(x)
+    while true
+        x′ = x0 + c * r^k
+        y′ = f(x′)
         n_evals += 1
+        if x′ ≥ x_upper_limit
+            throw(
+                ErrorException(
+                    "Bracket minimum first stage exceeded upper limit $(x_upper_limit) after $(k) iterations, " *
+                        "where x0 = $(x0), x′ = $(x′), y = $(y), y′ = $(y′)",
+                ),
+            )
+        end
+
+        if !isfinite(y′)
+            while true
+                x′′ = (x′ + x)/2
+                y′′ = f(x′′)
+                if isfinite(y′′) && (y′′ ≥ y)
+                    x_plus = x′′
+                    x0     = x
+                    break
+                elseif !isfinite(y′′)
+                    x′ = x′′
+                    y′ = y′′
+                else
+                    x = x′′
+                    y = y′′
+                end
+            end
+            break
+        elseif y < y′
+            x_plus = x′
+            x0     = x
+            break
+        end
+        x = x′
+        y = y′
+        k += 1
     end
     k = 0
     while true
