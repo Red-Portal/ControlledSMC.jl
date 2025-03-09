@@ -121,9 +121,15 @@ function bracket_minimum(
     x_plus  = x0
     x_minus = x0
     x_mid   = x0
+    u       = Inf
+    ϵ       = eps(Float64)
 
     while true
-        x′ = x0 + c * r^k
+        x′ = if !isfinite(u)
+            x0 + c * r^k
+        else
+            (u + x)/2
+        end
         y′ = f(x′)
         n_evals += 1
         if x′ ≥ x_upper_limit
@@ -135,31 +141,18 @@ function bracket_minimum(
             )
         end
 
+
         if !isfinite(y′)
-            while true
-                x′′ = (x′ + x)/2
-                y′′ = f(x′′)
-                if isfinite(y′′) && (y′′ ≥ y)
-                    x_plus = x′′
-                    x0     = x
-                    break
-                elseif !isfinite(y′′)
-                    x′ = x′′
-                    y′ = y′′
-                else
-                    x = x′′
-                    y = y′′
-                end
-            end
-            break
-        elseif y < y′
+            u = x′
+        elseif (y < y′) || abs(x - u) ≤ ϵ
             x_plus = x′
             x0     = x
             break
+        else
+            x = x′
+            y = y′
+            k += 1
         end
-        x = x′
-        y = y′
-        k += 1
     end
     k = 0
     while true
@@ -185,6 +178,8 @@ function bracket_minimum(
     end
     return x_minus, x_mid, x_plus, n_evals
 end
+
+using Plots
 
 function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
     x_lower_limit = log(eps(Float64))
