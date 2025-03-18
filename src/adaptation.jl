@@ -78,7 +78,7 @@ function golden_section_search(f, a::Real, b::Real, c::Real; abstol::Real=1e-2)
     f2 = f(x2)
     n_evals += 2
 
-    while abs(x0 - x3) ≥ abstol
+    while abs(x1 - x2) ≥ abstol/2
         if f2 < f1 || !isfinite(f1)
             x0 = x1
             x1 = x2
@@ -103,7 +103,11 @@ function golden_section_search(f, a::Real, b::Real, c::Real; abstol::Real=1e-2)
             )
         end
     end
-    return (x0 + x3) / 2, n_evals
+    if f1 < f2
+        return x1, n_evals
+    else
+        return x2, n_evals
+    end
 end
 
 function bracket_minimum(
@@ -121,15 +125,9 @@ function bracket_minimum(
     x_plus  = x0
     x_minus = x0
     x_mid   = x0
-    u       = Inf
-    ϵ       = eps(Float64)
 
     while true
-        x′ = if !isfinite(u)
-            x0 + c * r^k
-        else
-            (u + x)/2
-        end
+        x′ = x0 + c * r^k
         y′ = f(x′)
         n_evals += 1
         if x′ ≥ x_upper_limit
@@ -140,19 +138,14 @@ function bracket_minimum(
                 ),
             )
         end
-
-
-        if !isfinite(y′)
-            u = x′
-        elseif (y < y′) || abs(x - u) ≤ ϵ
+        if !isfinite(y′) || y < y′
             x_plus = x′
             x0     = x
             break
-        else
-            x = x′
-            y = y′
-            k += 1
         end
+        x = x′
+        y = y′
+        k += 1
     end
     k = 0
     while true
@@ -178,8 +171,6 @@ function bracket_minimum(
     end
     return x_minus, x_mid, x_plus, n_evals
 end
-
-using Plots
 
 function minimize(f, x0::Real, c::Real, r::Real, ϵ::Real)
     x_lower_limit = log(eps(Float64))

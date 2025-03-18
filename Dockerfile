@@ -1,4 +1,4 @@
-FROM julia:1.11-bookworm
+FROM julia:1.10-bookworm
 
 ENV USER smc
 ENV USER_HOME_DIR /home/${USER}
