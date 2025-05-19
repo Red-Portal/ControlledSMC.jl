@@ -126,9 +126,7 @@ function adapt_sampler(
         _, x_prop, ℓα = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
 
         # ESJD maximization
-        Δx2  = abs2.(x_prop - xtm1_sub)
-        α    = exp.(ℓα)
-        esjd = mean(sum(Δx2.*reshape(α, (1,:)); dims=1))
+        esjd = mean(sum(abs2.(x_prop - xtm1_sub); dims=1)[1,:].*exp.(ℓα))
 
         # acceptance rate control
         ℓEα = logsumexp(ℓα) - log(n_sub)
