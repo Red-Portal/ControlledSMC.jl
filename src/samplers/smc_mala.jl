@@ -51,8 +51,6 @@ function rand_initial_with_potential(
 end
 
 function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
-    n_particles = size(x, 2)
-
     μ_fwd  = gradient_flow_euler(πt, x, h, Γ)
     q_fwd  = BatchMvNormal(μ_fwd, 2 * h * Γ)
     x_prop = rand(rng, q_fwd)
@@ -75,8 +73,7 @@ function transition_mala(rng::Random.AbstractRNG, h, Γ, πt, x::AbstractMatrix)
             x[:, n]
         end
     end
-    ℓEα = logsumexp(ℓα) - log(n_particles)
-    return x_next, ℓEα
+    return x_next, x_prop, ℓα
 end
 
 function mutate_with_potential(
@@ -90,7 +87,7 @@ function mutate_with_potential(
 
     xt = xtm1
     for _ in 1:n_mcmc_steps
-        xt, _ = transition_mala(rng, ht, Γ, πt, xt)
+        xt, _, _ = transition_mala(rng, ht, Γ, πt, xt)
     end
     ℓG = potential(sampler, t, πt, πtm1, xtm1)
     return xt, ℓG, NamedTuple()
@@ -126,15 +123,23 @@ function adapt_sampler(
 
     function obj(ℓh′)
         rng_fixed  = copy(rng)
-        xt_sub, ℓα = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
-        esjd       = mean(sum(abs2.(xt_sub - xtm1_sub); dims=1))
-        reg        = if t == 1
+        _, x_prop, ℓα = transition_mala(rng_fixed, exp(ℓh′), Γ, πt, xtm1_sub)
+
+        # ESJD maximization
+        Δx2  = abs2.(x_prop - xtm1_sub)
+        α    = exp.(ℓα)
+        esjd = mean(sum(Δx2.*reshape(α, (1,:)); dims=1))
+
+        # acceptance rate control
+        ℓEα = logsumexp(ℓα) - log(n_sub)
+
+        reg = if t == 1
             τ * abs2(ℓh′)
         else
             ℓh_prev = log(sampler.stepsizes[t - 1])
             τ * abs2(ℓh′ - ℓh_prev)
         end
-        return adaptation_objective(sampler.adaptor, ℓα, esjd) + reg
+        return adaptation_objective(sampler.adaptor, ℓEα, esjd) + reg
     end
 
     r = 2.0
@@ -154,10 +159,11 @@ function adapt_sampler(
     ℓh, n_evals = minimize(obj, ℓh, c, r, ϵ)
     n_evals_total += n_evals
 
-    h     = exp(ℓh)
-    _, ℓα = transition_mala(rng, h, Γ, πt, xtm1_sub)
+    h        = exp(ℓh)
+    _, _, ℓα = transition_mala(rng, h, Γ, πt, xtm1_sub)
+    ℓEα      = logsumexp(ℓα) - log(n_sub)
 
-    stats   = (mala_stepsize=h, acceptance_rate=exp(ℓα), n_objective_evals=n_evals_total)
+    stats   = (mala_stepsize=h, acceptance_rate=exp(ℓEα), n_objective_evals=n_evals_total)
     sampler = @set sampler.stepsizes[t] = h
     return sampler, stats
 end
